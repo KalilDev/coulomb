@@ -119,3 +119,32 @@ class _ManagedListenerState extends State<ManagedListener> {
     );
   }
 }
+
+class EnumPopupButton<T> extends StatelessWidget {
+  final List<T> values;
+  final Widget Function(BuildContext, T) buildItem;
+  final Widget child;
+  final ValueChanged<T> onSelected;
+
+  const EnumPopupButton({
+    Key key,
+    this.values,
+    this.buildItem,
+    this.child,
+    this.onSelected,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton(
+      itemBuilder: (_) => values
+          .map((e) => PopupMenuItem<T>(
+                value: e,
+                child: buildItem(context, e),
+              ))
+          .toList(),
+      child: child,
+      onSelected: onSelected,
+    );
+  }
+}

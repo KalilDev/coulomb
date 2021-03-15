@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
+import 'package:coulomb/vec_conversion.dart';
 
 extension _Curry2<R, T0, T1> on R Function(T0, T1) {
   R Function(T1) curry(T0 v0) => (v1) => this(v0, v1);
@@ -67,12 +68,46 @@ class Cartesian extends StatefulWidget {
   _CartesianState createState() => _CartesianState();
 }
 
-extension on Vector4 {
-  Offset toOffset() => Offset(x, y);
+mixin PropManager {
+  List<Prop> _props = [];
+  void onPropChanged();
+
+  @mustCallSuper
+  void dispose() {
+    _props.forEach((e) => e.dispose());
+  }
 }
 
-extension on Offset {
-  Vector4 toVector4() => Vector4(dx, dy, 0, 1);
+class Prop<T> {
+  final T Function() create;
+  final void Function([T]) _dispose;
+
+  Prop({this.create, T initial, void Function([T]) dispose})
+      : _value = initial,
+        _dispose = dispose;
+  PropManager _manager;
+
+  T _value;
+
+  void dispose() {
+    _dispose?.call(_value);
+  }
+
+  T call() => _value ??=
+      create == null ? throw StateError('create shouldve been set!') : create();
+
+  void addManager(PropManager manager) {
+    assert(_manager == null);
+    _manager = manager;
+    manager._props.add(this);
+    return;
+  }
+
+  void set(T newValue) {
+    _value = newValue;
+    _manager.onPropChanged();
+    return;
+  }
 }
 
 class CartesianViewplaneController extends ChangeNotifier {
@@ -87,10 +122,9 @@ class CartesianViewplaneController extends ChangeNotifier {
   Matrix4 get untransform => _untransform ??= Matrix4.inverted(_transform);
   Size get viewSize => _viewSize;
   Rect get cartesianRect => _cartesianRect ??= () {
-        final origin = untransform.transform(Vector4(0, 0, 0, 1));
-        final end = untransform.transform(
-          Vector4(viewSize.width, viewSize.height, 0, 1),
-        );
+        final origin = untransform.transform(Vector4E.pointZero());
+        final end = untransform.transform(viewSize.toVector4Point());
+
         return Rect.fromPoints(origin.toOffset(), end.toOffset());
       }();
   double get scale => _scale;
@@ -134,8 +168,10 @@ class CartesianViewplaneController extends ChangeNotifier {
     if (_scale == s) {
       return;
     }
+    final oldTranslation = translation;
+    final newTranslation = (translation / _scale) * s;
     _scale = s;
-    _resetTransform(translation);
+    _resetTransform(newTranslation + (oldTranslation - newTranslation));
   }
 
   void setTranslation(Offset translation) {
@@ -161,10 +197,12 @@ class CartesianViewplaneController extends ChangeNotifier {
     );
   }
 
-  Offset cartesianToLocal(Offset coord) =>
-      transform.transform(coord.toVector4()).toOffset();
-  Offset localToCartesian(Offset coord) =>
-      untransform.transform(coord.toVector4()).toOffset();
+  Offset cartesianToLocal(Offset coord, {bool isPoint = true}) => transform
+      .transform(isPoint ? coord.toVector4Point() : coord.toVector4Distance())
+      .toOffset();
+  Offset localToCartesian(Offset coord, {bool isPoint = true}) => untransform
+      .transform(isPoint ? coord.toVector4Point() : coord.toVector4Distance())
+      .toOffset();
 
   void _setTransform(Matrix4 transform, {bool doNotNotify = false}) {
     _untransform = null;

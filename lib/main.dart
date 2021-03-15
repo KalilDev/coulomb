@@ -8,6 +8,7 @@ import 'package:coulomb/widgets/charge.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
+import 'vec_conversion.dart';
 
 void main() {
   runApp(MyApp());
@@ -35,7 +36,32 @@ class ChargesContainer extends StatefulWidget {
 }
 
 enum VisualizationType { gradient, field }
+
+extension on VisualizationType {
+  String get text {
+    switch (this) {
+      case VisualizationType.gradient:
+        return 'Gradiente de vetores';
+      case VisualizationType.field:
+        return 'Campo elétrico';
+    }
+  }
+}
+
 enum VisualizationQuality { low, medium, high }
+
+extension on VisualizationQuality {
+  String get text {
+    switch (this) {
+      case VisualizationQuality.low:
+        return 'Baixa';
+      case VisualizationQuality.medium:
+        return 'Média';
+      case VisualizationQuality.high:
+        return 'Alta';
+    }
+  }
+}
 
 class _ChargesContainerState extends State<ChargesContainer> {
   final _cartesianController = CartesianViewplaneController();
@@ -46,26 +72,44 @@ class _ChargesContainerState extends State<ChargesContainer> {
     ),
     Charge(Vector2(25, 10), -20)
   ];
-  VisualizationType _type = VisualizationType.gradient;
+  VisualizationType _type = VisualizationType.field;
   VisualizationType get type => _type;
   set type(VisualizationType type) => setState(() => _type = type);
 
-  VisualizationQuality _quality = VisualizationQuality.medium;
+  VisualizationQuality _quality = VisualizationQuality.low;
   VisualizationQuality get quality => _quality;
   set quality(VisualizationQuality quality) {
     setState(() => _quality = quality);
     _field = null;
   }
 
+  VisualizationQuality _distance = VisualizationQuality.low;
+  VisualizationQuality get distance => _distance;
+  set distance(VisualizationQuality distance) {
+    _field = null;
+    setState(() => _distance = distance);
+  }
+
+  double get _distanceFactor {
+    switch (distance) {
+      case VisualizationQuality.low:
+        return 0.75;
+      case VisualizationQuality.medium:
+        return 1.0;
+      case VisualizationQuality.high:
+        return 1.8;
+    }
+  }
+
   List<List<Vector2>> _field;
   List<List<Vector2>> get field => _field ??= walkField(charges, stepCount: () {
         switch (quality) {
           case VisualizationQuality.low:
-            return 500;
+            return (500 * _distanceFactor).toInt();
           case VisualizationQuality.medium:
-            return 1000;
+            return (1000 * _distanceFactor).toInt();
           case VisualizationQuality.high:
-            return 2000;
+            return (2000 * _distanceFactor).toInt();
         }
       }(), stepSize: () {
         switch (quality) {
@@ -141,50 +185,53 @@ class _ChargesContainerState extends State<ChargesContainer> {
     return Column(
       children: [
         Expanded(
-          child: ManagedListener(
-            createManager: _createGestureManager,
-            child: Cartesian(
-              controller: _cartesianController,
-              children: [
-                GestureDetector(
+          child: Cartesian(
+            controller: _cartesianController,
+            children: [
+              Positioned.fill(
+                child: ManagedListener(
+                  createManager: _createGestureManager,
+                ),
+              ),
+              Positioned.fill(
+                child: GestureDetector(
                   onTapUp: _onAddCharge,
                   onScaleStart: _scaleStart,
                   onScaleUpdate: _scaleUpdate,
                   onScaleEnd: _scaleEnd,
-                  child: SizedBox.expand(),
                   behavior: HitTestBehavior.translucent,
                 ),
-                for (var i = 0; i < charges.length; i++)
-                  ModifiableCharge(
-                    charge: charges[i],
-                    onUpdate: (c) {
-                      charges[i] = c;
-                      _field = null;
-                      setState(() {});
-                    },
-                    onRemove: () {
-                      charges.removeAt(i);
-                      _field = null;
-                      setState(() {});
-                    },
-                  ),
-              ],
-              painters: [
-                if (type == VisualizationType.field)
-                  ChargeFieldPainter(
-                      charges,
-                      field,
-                      Theme.of(context).brightness == Brightness.light
-                          ? Colors.orange
-                          : Colors.yellow,
-                      0.4),
-                if (type == VisualizationType.gradient)
-                  VectorFieldPainter(charges),
-                VectorPairPainter(
-                  vectorPairs,
+              ),
+              for (var i = 0; i < charges.length; i++)
+                ModifiableCharge(
+                  charge: charges[i],
+                  onUpdate: (c) {
+                    charges[i] = c;
+                    _field = null;
+                    setState(() {});
+                  },
+                  onRemove: () {
+                    charges.removeAt(i);
+                    _field = null;
+                    setState(() {});
+                  },
                 ),
-              ],
-            ),
+            ],
+            painters: [
+              if (type == VisualizationType.field)
+                ChargeFieldPainter(
+                    charges,
+                    field,
+                    Theme.of(context).brightness == Brightness.light
+                        ? Colors.orange
+                        : Colors.yellow,
+                    0.4),
+              if (type == VisualizationType.gradient)
+                VectorFieldPainter(charges),
+              VectorPairPainter(
+                vectorPairs,
+              ),
+            ],
           ),
         ),
         AnimatedBuilder(
@@ -196,31 +243,32 @@ class _ChargesContainerState extends State<ChargesContainer> {
             max: 15.0,
           ),
         ),
-        PopupMenuButton(
-          itemBuilder: (_) => VisualizationType.values
-              .map((e) => PopupMenuItem<VisualizationType>(
-                    value: e,
-                    child: Text(e.toString()),
-                  ))
-              .toList(),
+        EnumPopupButton<VisualizationType>(
+          values: VisualizationType.values,
+          buildItem: (_, e) => Text(e.text),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text(type.toString()),
+            child: Text('Tipo de simulação: ${type.text}'),
           ),
           onSelected: (t) => type = t,
         ),
-        PopupMenuButton(
-          itemBuilder: (_) => VisualizationQuality.values
-              .map((e) => PopupMenuItem<VisualizationQuality>(
-                    value: e,
-                    child: Text(e.toString()),
-                  ))
-              .toList(),
+        EnumPopupButton<VisualizationQuality>(
+          values: VisualizationQuality.values,
+          buildItem: (_, e) => Text(e.text),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text(quality.toString()),
+            child: Text('Qualidade da simulação: ${quality.text}'),
           ),
           onSelected: (q) => quality = q,
+        ),
+        EnumPopupButton<VisualizationQuality>(
+          values: VisualizationQuality.values,
+          buildItem: (_, e) => Text(e.text),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text('Distancia da simulação: ${distance.text}'),
+          ),
+          onSelected: (d) => distance = d,
         ),
       ],
     );
@@ -274,16 +322,4 @@ class _VectorHoverManager extends PointerHoverManager {
   void pointerHover(PointerHoverEvent event) {
     update(event.localPosition);
   }
-}
-
-extension on Offset {
-  Vector2 toVector2() => Vector2(dx, dy);
-}
-
-extension on Vector2 {
-  Offset toOffset() => Offset(x, y);
-}
-
-extension on Vector4 {
-  Vector2 toVector2() => Vector2(x, y);
 }

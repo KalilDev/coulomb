@@ -4,17 +4,20 @@ import '../phis.dart';
 import '../util.dart';
 import 'cartesian.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
+import 'package:coulomb/vec_conversion.dart';
 
 class ModifiableCharge extends StatefulWidget {
   final Charge charge;
   final ValueChanged<Charge> onUpdate;
   final VoidCallback onRemove;
+  final CartesianViewplaneController controller;
 
   const ModifiableCharge({
     Key key,
     this.charge,
     this.onUpdate,
     this.onRemove,
+    this.controller,
   }) : super(key: key);
   @override
   _ModifiableChargeState createState() => _ModifiableChargeState();
@@ -159,7 +162,7 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
   PointerDragManager _createDragManager(PointerEvent e) {
     if (e is PointerDownEvent) {
       return _ChargeDragManager(
-        CartesianViewplaneController.of(context),
+        widget.controller ?? CartesianViewplaneController.of(context),
         widget.charge,
         (charge) => setState(() => _charge = charge),
         widget.onUpdate,
@@ -200,16 +203,4 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
       ),
     );
   }
-}
-
-extension on Offset {
-  Vector2 toVector2() => Vector2(dx, dy);
-}
-
-extension on Vector2 {
-  Offset toOffset() => Offset(x, y);
-}
-
-extension on Vector4 {
-  Vector2 toVector2() => Vector2(x, y);
 }

@@ -6,6 +6,7 @@ import 'package:coulomb/phis.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:collection/collection.dart';
+import 'vec_conversion.dart';
 
 class VectorPair {
   final Vector4 position;
@@ -124,10 +125,15 @@ class VectorFieldPainter extends CartesianPainter {
   VectorFieldPainter(this.charges);
   @override
   void paint(Canvas canvas, CartesianCanvasInfo info) {
-    final gridSize = 10;
+    final gridSize = min(info.plane.width, info.plane.height) / 20;
+    const factorPerSizeUnit = 0.01;
+
     final widthCount = (info.plane.width / gridSize).ceil();
     final heightCount = (info.plane.height / gridSize).ceil();
     final paint = Paint()..color = Colors.green;
+
+    const forceEpsilon = 5;
+    const epsilon2 = forceEpsilon * forceEpsilon;
 
     for (var x = 0; x <= widthCount; x++) {
       final dx = info.plane.left - info.plane.left % gridSize + x * gridSize;
@@ -135,7 +141,16 @@ class VectorFieldPainter extends CartesianPainter {
         final dy = info.plane.top - info.plane.top % gridSize + y * gridSize;
         final pos = Vector2(dx, dy);
         final fieldAtPos = electricFieldAt(charges, pos);
-        paintVector(canvas, pos.toVector4(), fieldAtPos, paint, 0.1);
+        if (fieldAtPos.length2 < epsilon2) {
+          continue;
+        }
+        paintVector(
+          canvas,
+          pos.toVector4Point(),
+          fieldAtPos,
+          paint,
+          gridSize * factorPerSizeUnit,
+        );
       }
     }
   }
@@ -165,14 +180,4 @@ class VectorPairPainter extends CartesianPainter {
   @override
   bool shouldRepaint(VectorPairPainter oldDelegate) =>
       !_pairEquality.equals(pairs, oldDelegate.pairs);
-}
-
-extension on Vector2 {
-  Vector4 toVector4() => Vector4(x, y, 0, 1);
-
-  Offset toOffset() => Offset(x, y);
-}
-
-extension on Vector4 {
-  Offset toOffset() => Offset(x, y);
 }
