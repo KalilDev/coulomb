@@ -8,13 +8,13 @@ import 'package:coulomb/vec_conversion.dart';
 
 class ModifiableCharge extends StatefulWidget {
   final Charge charge;
-  final ValueChanged<Charge> onUpdate;
-  final VoidCallback onRemove;
-  final CartesianViewplaneController controller;
+  final ValueChanged<Charge>? onUpdate;
+  final VoidCallback? onRemove;
+  final CartesianViewplaneController? controller;
 
   const ModifiableCharge({
-    Key key,
-    this.charge,
+    Key? key,
+    required this.charge,
     this.onUpdate,
     this.onRemove,
     this.controller,
@@ -24,10 +24,10 @@ class ModifiableCharge extends StatefulWidget {
 }
 
 class ChargeDialog extends StatefulWidget {
-  final double initialValue;
+  final double? initialValue;
 
   const ChargeDialog({
-    Key key,
+    Key? key,
     this.initialValue,
   }) : super(key: key);
   @override
@@ -35,7 +35,7 @@ class ChargeDialog extends StatefulWidget {
 }
 
 class _ChargeDialogState extends State<ChargeDialog> {
-  TextEditingController controller;
+  /*llate*/ TextEditingController? controller;
   @override
   void initState() {
     controller = TextEditingController(
@@ -47,7 +47,7 @@ class _ChargeDialogState extends State<ChargeDialog> {
 
   @override
   void dispose() {
-    controller.dispose();
+    controller!.dispose();
     super.dispose();
   }
 
@@ -79,7 +79,7 @@ class _ChargeDialogState extends State<ChargeDialog> {
             child: Text('CANCELAR')),
         TextButton(
             onPressed: () => Navigator.pop(context,
-                double.tryParse(controller.value.text) ?? widget.initialValue),
+                double.tryParse(controller!.value.text) ?? widget.initialValue),
             child: Text('OK')),
       ],
     );
@@ -89,8 +89,8 @@ class _ChargeDialogState extends State<ChargeDialog> {
 class _ChargeDragManager extends PointerDragManager {
   final CartesianViewplaneController controller;
   final Charge initialCharge;
-  final ValueChanged<Charge> onInternalUpdate;
-  final ValueChanged<Charge> onChanged;
+  final ValueChanged<Charge?> onInternalUpdate;
+  final ValueChanged<Charge>? onChanged;
 
   _ChargeDragManager(
     this.controller,
@@ -98,7 +98,7 @@ class _ChargeDragManager extends PointerDragManager {
     this.onInternalUpdate,
     this.onChanged,
   );
-  Vector2 _position;
+  late Vector2 _position;
 
   @override
   void pointerCancel(PointerCancelEvent event) {
@@ -126,13 +126,13 @@ class _ChargeDragManager extends PointerDragManager {
 
   @override
   void pointerUp(PointerUpEvent event) {
-    onChanged(Charge(_position, initialCharge.mod));
+    onChanged!(Charge(_position, initialCharge.mod));
     onInternalUpdate(null);
   }
 }
 
 class _ModifiableChargeState extends State<ModifiableCharge> {
-  Charge _charge;
+  Charge? _charge;
   Charge get charge => _charge ?? widget.charge;
   Color get color => charge.mod > 0
       ? Colors.blue
@@ -151,15 +151,15 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
         }
 
         if (result.isNaN) {
-          widget.onRemove();
+          widget.onRemove!();
           return;
         }
 
-        widget.onUpdate(Charge(charge.position, result));
+        widget.onUpdate!(Charge(charge.position, result));
         return;
       };
 
-  PointerDragManager _createDragManager(PointerEvent e) {
+  PointerDragManager? _createDragManager(PointerEvent e) {
     if (e is PointerDownEvent) {
       return _ChargeDragManager(
         widget.controller ?? CartesianViewplaneController.of(context),
@@ -172,10 +172,10 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
 
   @override
   Widget build(BuildContext context) {
-    final chargeRadius = charge.mod.abs().clamp(3.0, double.infinity);
+    final num chargeRadius = charge.mod.abs().clamp(3.0, double.infinity);
     return CartesianWidget(
-      position:
-          charge.position.toOffset() - Offset(chargeRadius, -chargeRadius),
+      position: charge.position.toOffset() -
+          Offset(chargeRadius as double, -chargeRadius),
       child: Material(
         color: color,
         elevation: 4,

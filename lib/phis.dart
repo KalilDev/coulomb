@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:meta/meta.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 class Charge {
@@ -42,8 +41,8 @@ bool _isInsideCharge(
 List<Vector2> walkFieldFromPoint(
   List<Charge> charges,
   Vector2 initialPoint, {
-  @required int stepCount,
-  @required bool walkBackwards,
+  required int stepCount,
+  required bool walkBackwards,
   double stepSize = 1,
 }) {
   final stepSquared = stepSize * stepSize;
@@ -72,7 +71,7 @@ List<Vector2> walkFieldFromPoint(
 
 List<List<Vector2>> walkField(
   List<Charge> charges, {
-  @required int stepCount,
+  required int stepCount,
   int linesPerCoulomb = 5,
   double stepSize = 1,
 }) {

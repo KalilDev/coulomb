@@ -1,22 +1,17 @@
-import 'dart:developer';
-
+import 'package:coulomb/widgets/props.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:coulomb/vec_conversion.dart';
-
-extension _Curry2<R, T0, T1> on R Function(T0, T1) {
-  R Function(T1) curry(T0 v0) => (v1) => this(v0, v1);
-}
 
 class CartesianWidget extends StatelessWidget {
   final Offset position;
   final Widget child;
 
   const CartesianWidget({
-    Key key,
-    this.position,
-    this.child,
+    Key? key,
+    required this.position,
+    required this.child,
   }) : super(key: key);
 
   @override
@@ -40,9 +35,9 @@ class CartesianWidget extends StatelessWidget {
 }
 
 class _CartesianScope extends InheritedWidget {
-  final CartesianViewplaneController controller;
+  final CartesianViewplaneController? controller;
 
-  _CartesianScope({Key key, this.controller, Widget child})
+  _CartesianScope({Key? key, this.controller, required Widget child})
       : super(key: key, child: child);
 
   @override
@@ -54,10 +49,10 @@ class Cartesian extends StatefulWidget {
   final List<Widget> children;
   final List<CartesianPainter> painters;
   final List<CartesianPainter> foregroundPainters;
-  final CartesianViewplaneController controller;
+  final CartesianViewplaneController? controller;
 
   const Cartesian({
-    Key key,
+    Key? key,
     this.children = const [],
     this.painters = const [],
     this.foregroundPainters = const [],
@@ -68,116 +63,111 @@ class Cartesian extends StatefulWidget {
   _CartesianState createState() => _CartesianState();
 }
 
-mixin PropManager {
-  List<Prop> _props = [];
-  void onPropChanged();
+class PropWidget extends StatefulWidget {
+  final WidgetBuilder builder;
 
-  @mustCallSuper
-  void dispose() {
-    _props.forEach((e) => e.dispose());
-  }
+  const PropWidget({Key? key, required this.builder}) : super(key: key);
+  @override
+  _PropWidgetState createState() => _PropWidgetState();
 }
 
-class Prop<T> {
-  final T Function() create;
-  final void Function([T]) _dispose;
+class _PropWidgetState extends State<PropWidget> with PropScope {
+  late final child = GetterProp<Widget>(() => Builder(builder: widget.builder))
+    ..addManager(this);
+  var _isInBuild = false;
 
-  Prop({this.create, T initial, void Function([T]) dispose})
-      : _value = initial,
-        _dispose = dispose;
-  PropManager _manager;
-
-  T _value;
-
-  void dispose() {
-    _dispose?.call(_value);
-  }
-
-  T call() => _value ??=
-      create == null ? throw StateError('create shouldve been set!') : create();
-
-  void addManager(PropManager manager) {
-    assert(_manager == null);
-    _manager = manager;
-    manager._props.add(this);
-    return;
-  }
-
-  void set(T newValue) {
-    _value = newValue;
-    _manager.onPropChanged();
-    return;
-  }
-}
-
-class CartesianViewplaneController extends ChangeNotifier {
-  Matrix4 _transform;
-  Matrix4 _untransform;
-  Size _viewSize;
-  Rect _cartesianRect;
-  double _scale = 1.0;
-  CartesianCanvasInfo _canvasInfo;
-
-  Matrix4 get transform => _transform;
-  Matrix4 get untransform => _untransform ??= Matrix4.inverted(_transform);
-  Size get viewSize => _viewSize;
-  Rect get cartesianRect => _cartesianRect ??= () {
-        final origin = untransform.transform(Vector4E.pointZero());
-        final end = untransform.transform(viewSize.toVector4Point());
-
-        return Rect.fromPoints(origin.toOffset(), end.toOffset());
-      }();
-  double get scale => _scale;
-  Offset get translation => () {
-        final v = transform.getColumn(3);
-        return Offset(v.x, -v.y);
-      }();
-  CartesianCanvasInfo get canvasInfo => _canvasInfo ??= CartesianCanvasInfo(
-        transform,
-        untransform,
-        cartesianRect,
-        viewSize,
-      );
-  static CartesianViewplaneController of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_CartesianScope>().controller;
-
-  void setSize(Size s) {
-    if (_viewSize == s) {
+  @override
+  void onPropsChanged() {
+    if (_isInBuild) {
       return;
     }
-    _viewSize = s;
-    if (transform == null) {
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _isInBuild = true;
+    final result = child();
+    _isInBuild = false;
+
+    return result;
+  }
+}
+
+class CartesianViewplaneController extends ChangeNotifier with PropScope {
+  late final _transform = LateProp<Matrix4>()..addManager(this);
+  late final _untransform = GetterProp<Matrix4>(
+    () => Matrix4.inverted(_transform()),
+  )..addManager(this);
+  late final _viewSize = LateProp<Size>()..addManager(this);
+  late final _cartesianRect = GetterProp<Rect>(() {
+    final origin = untransform.transform(Vector4E.pointZero());
+    final end = untransform.transform(viewSize.toVector4Point());
+
+    return Rect.fromPoints(origin.toOffset(), end.toOffset());
+  })
+    ..addManager(this);
+  late final _scale = ValueProp<double>(1.0)..addManager(this);
+
+  late final _translation = GetterProp<Offset>(() {
+    final v = transform.getColumn(3);
+    return Offset(v.x, -v.y);
+  })
+    ..addManager(this);
+  late final _canvasInfo = GetterProp<CartesianCanvasInfo>(
+    () => CartesianCanvasInfo(
+      transform,
+      untransform,
+      cartesianRect,
+      viewSize,
+    ),
+  )..addManager(this);
+
+  Matrix4 get transform => _transform();
+  Matrix4 get untransform => _untransform();
+  Size get viewSize => _viewSize();
+  Rect get cartesianRect => _cartesianRect();
+  double get scale => _scale();
+  Offset get translation => _translation();
+  CartesianCanvasInfo get canvasInfo => _canvasInfo();
+
+  static CartesianViewplaneController of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_CartesianScope>()!
+      .controller!;
+
+  void setSize(Size s) {
+    final oldSize = _viewSize.maybeGet();
+    _viewSize.set(s, false);
+    if (oldSize == null) {
       _resetTransform(
-          Offset(
-            _viewSize.width / 2,
-            -_viewSize.height / 2,
-          ),
-          doNotNotify: true);
+        Offset(
+          viewSize.width / 2,
+          -viewSize.height / 2,
+        ),
+        doNotNotify: true, // Otherwise we would call setState inside of build
+      );
+    } else {
+      final oldCenter = oldSize.center(Offset.zero);
+      final newCenter = s.center(Offset.zero);
+      final delta = newCenter - oldCenter;
+
+      _resetTransform(translation.translate(delta.dx, delta.dy));
     }
   }
 
   void setScaleAndTranslation(double s, Offset t) {
-    if (_scale == s || translation == t) {
-      return;
-    }
-    _scale = s;
+    _scale.set(s, false);
     _resetTransform(t);
   }
 
   void setScale(double s) {
-    if (_scale == s) {
-      return;
-    }
     final oldTranslation = translation;
-    final newTranslation = (translation / _scale) * s;
-    _scale = s;
+    final newTranslation = (translation / _scale()) * s;
+    _scale.set(s, false);
     _resetTransform(newTranslation + (oldTranslation - newTranslation));
   }
 
   void setTranslation(Offset translation) {
-    if (translation == this.translation) {
-      return;
-    }
     _resetTransform(translation);
   }
 
@@ -205,18 +195,17 @@ class CartesianViewplaneController extends ChangeNotifier {
       .toOffset();
 
   void _setTransform(Matrix4 transform, {bool doNotNotify = false}) {
-    _untransform = null;
-    _transform = transform;
-    _cartesianRect = null;
-    _canvasInfo = null;
-    if (!doNotNotify) {
-      notifyListeners();
-    }
+    _transform.set(transform, !doNotNotify);
+  }
+
+  @override
+  void onPropsChanged() {
+    notifyListeners();
   }
 }
 
 class _CartesianState extends State<Cartesian> {
-  CartesianViewplaneController _controller;
+  late CartesianViewplaneController _controller;
   void initState() {
     super.initState();
     _controller = widget.controller ?? CartesianViewplaneController();
@@ -304,7 +293,7 @@ class _CartesianPlanePainter extends CartesianPainter {
   _CartesianPlanePainter(this.color, this.gridColor);
 
   @override
-  void paint(Canvas canvas, [CartesianCanvasInfo info]) {
+  void paint(Canvas canvas, CartesianCanvasInfo info) {
     final plane = info.plane;
     final paint = Paint()
       ..color = color

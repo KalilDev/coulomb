@@ -18,8 +18,8 @@ abstract class PointerHoverManager extends PointerManager {
 }
 
 class PointerState {
-  PointerHoverManager hoverManager;
-  PointerDragManager dragManager;
+  PointerHoverManager? hoverManager;
+  PointerDragManager? dragManager;
 
   void pointerDown(PointerDownEvent event) {
     hoverManager?.pointerCancel(PointerCancelEvent(
@@ -53,25 +53,25 @@ class PointerState {
 
   void maybeCreate(
     PointerEvent event,
-    PointerManager Function(PointerEvent) create,
+    PointerManager? Function(PointerEvent) create,
   ) {
     if (event is PointerHoverEvent) {
-      hoverManager ??= create(event);
+      hoverManager ??= create(event) as PointerHoverManager?;
     }
     if (event is PointerDownEvent) {
-      dragManager ??= create(event);
+      dragManager ??= create(event) as PointerDragManager?;
     }
   }
 }
 
 class ManagedListener extends StatefulWidget {
-  final PointerManager Function(PointerEvent) createManager;
-  final Widget child;
+  final PointerManager? Function(PointerEvent) createManager;
+  final Widget? child;
   final HitTestBehavior behavior;
 
   const ManagedListener({
-    Key key,
-    this.createManager,
+    Key? key,
+    required this.createManager,
     this.child,
     this.behavior = HitTestBehavior.opaque,
   }) : super(key: key);
@@ -90,14 +90,14 @@ class _ManagedListenerState extends State<ManagedListener> {
         ..pointerDown(event);
 
   void _pointerCancel(PointerCancelEvent event) {
-    _state[event.pointer].pointerCancel(event);
+    _state[event.pointer]!.pointerCancel(event);
   }
 
   void _pointerMove(PointerMoveEvent event) =>
-      _state[event.pointer].pointerMove(event);
+      _state[event.pointer]!.pointerMove(event);
 
   void _pointerUp(PointerUpEvent event) =>
-      _state[event.pointer].pointerUp(event);
+      _state[event.pointer]!.pointerUp(event);
 
   void _pointerHover(PointerHoverEvent event) => _state.putIfAbsent(
         event.pointer,
@@ -123,13 +123,13 @@ class _ManagedListenerState extends State<ManagedListener> {
 class EnumPopupButton<T> extends StatelessWidget {
   final List<T> values;
   final Widget Function(BuildContext, T) buildItem;
-  final Widget child;
-  final ValueChanged<T> onSelected;
+  final Widget? child;
+  final ValueChanged<T>? onSelected;
 
   const EnumPopupButton({
-    Key key,
-    this.values,
-    this.buildItem,
+    Key? key,
+    required this.values,
+    required this.buildItem,
     this.child,
     this.onSelected,
   }) : super(key: key);

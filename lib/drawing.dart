@@ -30,7 +30,7 @@ class ChargeFieldPainter extends CartesianPainter {
   static final rotate90 = Matrix2.rotation(pi / 2);
 
   @override
-  void paint(Canvas canvas, [CartesianCanvasInfo info]) {
+  void paint(Canvas canvas, CartesianCanvasInfo info) {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -40,7 +40,7 @@ class ChargeFieldPainter extends CartesianPainter {
     final path = Path();
     for (final pathPoints in field) {
       var didInitialMove = false;
-      Vector2 pointToMove;
+      Vector2? pointToMove;
       for (final p in pathPoints) {
         if (!info.plane.contains(p.toOffset())) {
           pointToMove = p;
@@ -104,7 +104,7 @@ void paintVector(
   Paint paint, [
   double sizeFactor = 1.0,
 ]) {
-  final scale = (log(vector.length) * 2).clamp(10.0, double.infinity);
+  final num scale = (log(vector.length) * 2).clamp(10.0, double.infinity);
   final angle = atan2(vector.y, vector.x);
   final m = Matrix4.identity()
     ..translate(position)
@@ -167,7 +167,7 @@ class VectorPairPainter extends CartesianPainter {
   VectorPairPainter(this.pairs);
 
   @override
-  void paint(Canvas canvas, [CartesianCanvasInfo info]) {
+  void paint(Canvas canvas, CartesianCanvasInfo info) {
     final vecPaint = Paint()..color = Colors.orange;
     for (final pair in pairs) {
       var pos = pair.position;

@@ -1,10 +1,9 @@
-import 'dart:developer';
-
 import 'package:coulomb/widgets/cartesian.dart';
 import 'package:coulomb/drawing.dart';
 import 'package:coulomb/phis.dart';
 import 'package:coulomb/util.dart';
 import 'package:coulomb/widgets/charge.dart';
+import 'package:coulomb/widgets/props.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
@@ -63,6 +62,68 @@ extension on VisualizationQuality {
   }
 }
 
+class ChargesContainerController extends PropController {
+  late final cartesianController = ValueProp(CartesianViewplaneController());
+  late final charges = ValueProp([
+    Charge(
+      Vector2(-25, 10),
+      10,
+    ),
+    Charge(Vector2(25, 10), -20)
+  ])
+    ..addManager(this);
+  late final type = ValueProp(VisualizationType.field)..addManager(this);
+  late final quality = ValueProp(VisualizationQuality.low)..addManager(this);
+  late final distance = ValueProp(VisualizationQuality.low)..addManager(this);
+  late final GetterProp<double> _distanceFactor = GetterProp<double>(() {
+    switch (distance()) {
+      case VisualizationQuality.low:
+        return 0.75;
+      case VisualizationQuality.medium:
+        return 1.0;
+      case VisualizationQuality.high:
+        return 1.8;
+      default:
+        throw UnimplementedError();
+    }
+  })
+    ..addManager(this);
+  late final field =
+      GetterProp<List<List<Vector2>>>(() => walkField(charges(), stepCount: () {
+            switch (quality()) {
+              case VisualizationQuality.low:
+                return (500 * _distanceFactor()).toInt();
+              case VisualizationQuality.medium:
+                return (1000 * _distanceFactor()).toInt();
+              case VisualizationQuality.high:
+                return (2000 * _distanceFactor()).toInt();
+              default:
+                throw UnimplementedError();
+            }
+          }(), stepSize: () {
+            switch (quality()) {
+              case VisualizationQuality.low:
+                return 3.0;
+              case VisualizationQuality.medium:
+                return 2.0;
+              case VisualizationQuality.high:
+                return 1.0;
+              default:
+                throw UnimplementedError();
+            }
+          }()));
+
+  late final _pointerPositions = ValueProp(<int, Offset>{});
+  late final vectorPairs = GetterProp(() => _pointerPositions()
+      .values
+      .map(cartesianController().localToCartesian)
+      .map((pos) => VectorPair(
+            Vector4(pos.dx, pos.dy, 0, 1),
+            electricFieldAt(charges(), Vector2(pos.dx, pos.dy)),
+          ))
+      .toList());
+}
+
 class _ChargesContainerState extends State<ChargesContainer> {
   final _cartesianController = CartesianViewplaneController();
   final charges = [
@@ -101,7 +162,7 @@ class _ChargesContainerState extends State<ChargesContainer> {
     }
   }
 
-  List<List<Vector2>> _field;
+  List<List<Vector2>>? _field;
   List<List<Vector2>> get field => _field ??= walkField(charges, stepCount: () {
         switch (quality) {
           case VisualizationQuality.low:
@@ -132,7 +193,7 @@ class _ChargesContainerState extends State<ChargesContainer> {
           ))
       .toList();
 
-  PointerManager _createGestureManager(PointerEvent e) {
+  PointerManager? _createGestureManager(PointerEvent e) {
     if (e is PointerHoverEvent) {
       final pointer = e.pointer;
       return _VectorHoverManager(
@@ -158,9 +219,9 @@ class _ChargesContainerState extends State<ChargesContainer> {
     _field = null;
   }
 
-  double _baseScale;
-  Offset _initialTranslation;
-  Offset _initialFocalPoint;
+  double? _baseScale;
+  Offset? _initialTranslation;
+  Offset? _initialFocalPoint;
   void _scaleEnd(ScaleEndDetails details) {
     _baseScale = null;
     _initialTranslation = null;
@@ -168,10 +229,10 @@ class _ChargesContainerState extends State<ChargesContainer> {
   }
 
   void _scaleUpdate(ScaleUpdateDetails details) {
-    final focusDelta = details.localFocalPoint - _initialFocalPoint;
-    final translation = _initialTranslation + focusDelta.scale(1, -1);
-    final scale = (_baseScale * details.scale).clamp(0.4, 15.0);
-    _cartesianController.setScaleAndTranslation(scale, translation);
+    final focusDelta = details.localFocalPoint - _initialFocalPoint!;
+    final translation = _initialTranslation! + focusDelta.scale(1, -1);
+    final num scale = (_baseScale! * details.scale).clamp(0.4, 15.0);
+    _cartesianController.setScaleAndTranslation(scale as double, translation);
   }
 
   void _scaleStart(ScaleStartDetails details) {
@@ -280,11 +341,14 @@ class _TranslationDragManager extends PointerDragManager {
 
   _TranslationDragManager(this.controller);
 
-  Offset _initialTranslation;
+  Offset? _initialTranslation;
 
   @override
   void pointerCancel(PointerCancelEvent event) {
-    controller.setTranslation(_initialTranslation);
+    if (_initialTranslation == null) {
+      return;
+    }
+    controller.setTranslation(_initialTranslation!);
     _initialTranslation = null;
   }
 
