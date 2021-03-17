@@ -63,7 +63,11 @@ extension on VisualizationQuality {
 }
 
 class ChargesContainerController extends PropController {
-  late final cartesianController = ValueProp(CartesianViewplaneController());
+  ChargesContainerController() {
+    cartesianController().addListener(cartesianController.notifyDependents);
+  }
+  late final cartesianController = ValueProp(CartesianViewplaneController())
+    ..addManager(this);
   late final charges = ValueProp([
     Charge(
       Vector2(-25, 10),
@@ -111,9 +115,10 @@ class ChargesContainerController extends PropController {
               default:
                 throw UnimplementedError();
             }
-          }()));
+          }()))
+        ..addManager(this);
 
-  late final _pointerPositions = ValueProp(<int, Offset>{});
+  late final _pointerPositions = ValueProp(<int, Offset>{})..addManager(this);
   late final vectorPairs = GetterProp(() => _pointerPositions()
       .values
       .map(cartesianController().localToCartesian)
@@ -121,93 +126,33 @@ class ChargesContainerController extends PropController {
             Vector4(pos.dx, pos.dy, 0, 1),
             electricFieldAt(charges(), Vector2(pos.dx, pos.dy)),
           ))
-      .toList());
+      .toList())
+    ..addManager(this);
 }
 
 class _ChargesContainerState extends State<ChargesContainer> {
-  final _cartesianController = CartesianViewplaneController();
-  final charges = [
-    Charge(
-      Vector2(-25, 10),
-      10,
-    ),
-    Charge(Vector2(25, 10), -20)
-  ];
-  VisualizationType _type = VisualizationType.field;
-  VisualizationType get type => _type;
-  set type(VisualizationType type) => setState(() => _type = type);
-
-  VisualizationQuality _quality = VisualizationQuality.low;
-  VisualizationQuality get quality => _quality;
-  set quality(VisualizationQuality quality) {
-    setState(() => _quality = quality);
-    _field = null;
-  }
-
-  VisualizationQuality _distance = VisualizationQuality.low;
-  VisualizationQuality get distance => _distance;
-  set distance(VisualizationQuality distance) {
-    _field = null;
-    setState(() => _distance = distance);
-  }
-
-  double get _distanceFactor {
-    switch (distance) {
-      case VisualizationQuality.low:
-        return 0.75;
-      case VisualizationQuality.medium:
-        return 1.0;
-      case VisualizationQuality.high:
-        return 1.8;
-    }
-  }
-
-  List<List<Vector2>>? _field;
-  List<List<Vector2>> get field => _field ??= walkField(charges, stepCount: () {
-        switch (quality) {
-          case VisualizationQuality.low:
-            return (500 * _distanceFactor).toInt();
-          case VisualizationQuality.medium:
-            return (1000 * _distanceFactor).toInt();
-          case VisualizationQuality.high:
-            return (2000 * _distanceFactor).toInt();
-        }
-      }(), stepSize: () {
-        switch (quality) {
-          case VisualizationQuality.low:
-            return 3.0;
-          case VisualizationQuality.medium:
-            return 2.0;
-          case VisualizationQuality.high:
-            return 1.0;
-        }
-      }());
-
-  final _pointerPositions = <int, Offset>{};
-
-  List<VectorPair> get vectorPairs => _pointerPositions.values
-      .map(_cartesianController.localToCartesian)
-      .map((pos) => VectorPair(
-            Vector4(pos.dx, pos.dy, 0, 1),
-            electricFieldAt(charges, Vector2(pos.dx, pos.dy)),
-          ))
-      .toList();
+  late final _controller = ChargesContainerController()
+    ..addListener(() => setState(() {}));
 
   PointerManager? _createGestureManager(PointerEvent e) {
     if (e is PointerHoverEvent) {
       final pointer = e.pointer;
       return _VectorHoverManager(
-        () => setState(() => _pointerPositions.remove(pointer)),
-        (pos) => setState(() => _pointerPositions[pointer] = pos),
+        () =>
+            _controller._pointerPositions.update((pos) => pos.remove(pointer)),
+        (pos) => _controller._pointerPositions.update(
+          (positions) => positions[pointer] = pos,
+        ),
       );
     }
     if (e is PointerDownEvent) {
-      return _TranslationDragManager(_cartesianController);
+      return _TranslationDragManager(_controller.cartesianController());
     }
   }
 
   void _onAddCharge(TapUpDetails e) async {
-    final chargePos = _cartesianController.localToCartesian(e.localPosition);
+    final chargePos =
+        _controller.cartesianController().localToCartesian(e.localPosition);
     final chargeMod = await showDialog<double>(
       context: context,
       builder: (_) => ChargeDialog(),
@@ -215,8 +160,12 @@ class _ChargesContainerState extends State<ChargesContainer> {
     if (chargeMod == null || chargeMod.isNaN) {
       return;
     }
-    charges.add(Charge(chargePos.toVector2(), chargeMod));
-    _field = null;
+    _controller.charges.update(
+      (charges) => charges.add(Charge(
+        chargePos.toVector2(),
+        chargeMod,
+      )),
+    );
   }
 
   double? _baseScale;
@@ -232,22 +181,31 @@ class _ChargesContainerState extends State<ChargesContainer> {
     final focusDelta = details.localFocalPoint - _initialFocalPoint!;
     final translation = _initialTranslation! + focusDelta.scale(1, -1);
     final num scale = (_baseScale! * details.scale).clamp(0.4, 15.0);
-    _cartesianController.setScaleAndTranslation(scale as double, translation);
+    _controller
+        .cartesianController()
+        .setScaleAndTranslation(scale as double, translation);
   }
 
   void _scaleStart(ScaleStartDetails details) {
-    _baseScale = _cartesianController.scale;
-    _initialTranslation = _cartesianController.translation;
+    _baseScale = _controller.cartesianController().scale;
+    _initialTranslation = _controller.cartesianController().translation;
     _initialFocalPoint = details.localFocalPoint;
   }
 
   @override
   Widget build(BuildContext context) {
+    final charges = _controller.charges();
+    final type = _controller.type();
+    final vectorPairs = _controller.vectorPairs();
+    final field = _controller.field();
+    final quality = _controller.quality();
+    final distance = _controller.distance();
+    final scale = _controller.cartesianController().scale;
     return Column(
       children: [
         Expanded(
           child: Cartesian(
-            controller: _cartesianController,
+            controller: _controller.cartesianController(),
             children: [
               Positioned.fill(
                 child: ManagedListener(
@@ -266,16 +224,11 @@ class _ChargesContainerState extends State<ChargesContainer> {
               for (var i = 0; i < charges.length; i++)
                 ModifiableCharge(
                   charge: charges[i],
-                  onUpdate: (c) {
-                    charges[i] = c;
-                    _field = null;
-                    setState(() {});
-                  },
-                  onRemove: () {
-                    charges.removeAt(i);
-                    _field = null;
-                    setState(() {});
-                  },
+                  onUpdate: (c) =>
+                      _controller.charges.update((charges) => charges[i] = c),
+                  onRemove: () => _controller.charges.update(
+                    (charges) => charges.removeAt(i),
+                  ),
                 ),
             ],
             painters: [
@@ -295,11 +248,12 @@ class _ChargesContainerState extends State<ChargesContainer> {
             ],
           ),
         ),
-        AnimatedBuilder(
-          animation: _cartesianController,
+        PropBuilder<double>(
+          scope: _controller,
+          value: () => _controller.cartesianController().scale,
           builder: (_, __) => Slider(
-            value: _cartesianController.scale,
-            onChanged: (d) => _cartesianController.setScale(d),
+            value: scale,
+            onChanged: (d) => _controller.cartesianController().setScale(d),
             min: 0.4,
             max: 15.0,
           ),
@@ -311,7 +265,7 @@ class _ChargesContainerState extends State<ChargesContainer> {
             padding: const EdgeInsets.all(8.0),
             child: Text('Tipo de simulação: ${type.text}'),
           ),
-          onSelected: (t) => type = t,
+          onSelected: (t) => _controller.type.set(t),
         ),
         EnumPopupButton<VisualizationQuality>(
           values: VisualizationQuality.values,
@@ -320,7 +274,7 @@ class _ChargesContainerState extends State<ChargesContainer> {
             padding: const EdgeInsets.all(8.0),
             child: Text('Qualidade da simulação: ${quality.text}'),
           ),
-          onSelected: (q) => quality = q,
+          onSelected: (q) => _controller.quality.set(q),
         ),
         EnumPopupButton<VisualizationQuality>(
           values: VisualizationQuality.values,
@@ -329,7 +283,7 @@ class _ChargesContainerState extends State<ChargesContainer> {
             padding: const EdgeInsets.all(8.0),
             child: Text('Distancia da simulação: ${distance.text}'),
           ),
-          onSelected: (d) => distance = d,
+          onSelected: (d) => _controller.distance.set(d),
         ),
       ],
     );

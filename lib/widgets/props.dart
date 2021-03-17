@@ -77,7 +77,6 @@ mixin PropScope {
       );
     }
     if (!hadNotified && notify) {
-      print('notifying $this');
       onPropsChanged();
     }
   }
@@ -203,6 +202,7 @@ abstract class MutableProp<T> extends Prop<T> {
   void set(T newValue, [bool notify = true]);
   void notifyDependents() {
     _manager!.invalidateProp(this);
+    _manager?.onPropsChanged();
   }
 }
 
@@ -336,8 +336,8 @@ class _PropBuilderState<T> extends State<PropBuilder<T>> with PropScope {
 
   @override
   void onPropsChanged() {
+    print('on props changed');
     if (!_building) {
-      print('Updated with onPropsChanged');
       setState(() {});
     }
   }
@@ -354,7 +354,6 @@ class _PropBuilderState<T> extends State<PropBuilder<T>> with PropScope {
     }
     value?.dispose();
     value = GetterProp(widget.value, value?._value);
-    print('Updated value');
   }
 
   @override
@@ -366,11 +365,9 @@ class _PropBuilderState<T> extends State<PropBuilder<T>> with PropScope {
       scope.addSubscope(this);
       oldScope = scope;
       value = GetterProp<T>(widget.value)..addManager(this);
-      print('Updated scope');
     }
-    if (value!.isAttached) {
+    if (!value!.isAttached) {
       value!.addManager(this);
-      print('Attached value');
     }
     _building = true;
     final child = widget.builder(context, value!());
