@@ -77,20 +77,17 @@ class ChargedBarWidget extends StatelessWidget with PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Transform.rotate(
-      angle: bar.rotation - pi / 2,
-      child: Material(
-        elevation: 4.0,
-        color: chargeColor(bar.totalCharge),
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox.fromSize(
-            size: bar.rectSize,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                bar.totalCharge.toString(),
-              ),
+    return Material(
+      elevation: 2.0,
+      color: chargeColor(bar.totalCharge),
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox.fromSize(
+          size: bar.rectSize,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              bar.totalCharge.toString(),
             ),
           ),
         ),

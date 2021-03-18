@@ -114,7 +114,7 @@ class SimulatedObject
   @override
   final Vector2 velocity = Vector2.zero();
 
-  static const kMassSizeFactor = 100.0;
+  static const kMassSizeFactor = 10.0;
 
   double get diameter => kMassSizeFactor * mass;
   double get radius => diameter / 2;
@@ -165,6 +165,7 @@ class GroundSurface extends CollidableSurface {
 }
 
 class SimulatedWorld implements ISimulatedWorld {
+  double simulationSpeed = 1.0;
   final List<ChargedBar> _bars = [
     ChargedBar(Vector2.zero(), pi / 2, 10),
     ChargedBar(Vector2(0, 30), pi / 2, -10),
@@ -179,9 +180,41 @@ class SimulatedWorld implements ISimulatedWorld {
     //Charge(Vector2(10, 0), 10),
   ];
   List<Charge> get fixedCharges => UnmodifiableListView(_fixedCharges);
+  final List<SimulatedObject> _objects = [
+    SimulatedObject(position: Vector2(0, 20))
+  ];
+  List<SimulatedObject> get objects => UnmodifiableListView(_objects);
+
+  double gravity = 10.0;
+
+  void reset() {
+    _fixedCharges
+      ..clear()
+      ..addAll([
+        Charge(Vector2(-50, 0), 10),
+      ]);
+    _bars
+      ..clear()
+      ..addAll([
+        ChargedBar(Vector2.zero(), pi / 2, 10),
+        ChargedBar(Vector2(0, 30), pi / 2, -10),
+      ]);
+    _objects
+      ..clear()
+      ..addAll([
+        SimulatedObject(position: Vector2(0, 20)),
+      ]);
+    gravity = 10.0;
+    _fieldCharges = null;
+  }
 
   void updateFixedCharges(void Function(List<Charge>) updates) {
     updates(_fixedCharges);
+    _fieldCharges = null;
+  }
+
+  void updateObjects(void Function(List<SimulatedObject>) updates) {
+    updates(_objects);
     _fieldCharges = null;
   }
 
@@ -195,9 +228,6 @@ class SimulatedWorld implements ISimulatedWorld {
     _fieldCharges = null;
   }
 
-  final List<SimulatedObject> objects = [
-    SimulatedObject(position: Vector2(0, 20))
-  ];
   final ground = GroundSurface(0);
 
   List<Charge> get allCharges => [
@@ -224,10 +254,10 @@ class SimulatedWorld implements ISimulatedWorld {
 
   @override
   Vector2 gravitationalFieldAt(Vector2 v) {
-    return Vector2(0, -10);
+    return Vector2(0, -gravity);
   }
 
-  static final debug = [];
+  var simulationStep = Duration(milliseconds: 1);
 
   @override
   void update(Duration dt) {
@@ -256,13 +286,13 @@ class SimulatedWorld implements ISimulatedWorld {
       if (o.velocity.length >= 10) {
         //debugger();
       }
-      print(o.position);
+      //print(o.position);
       // Check collision with ground
       if (!ground.isColliding(o)) {
         continue;
       }
       final surface = ground.surfaceFor(o);
-      print(surface);
+      //print(surface);
       //final surfaceDirection = (surface.clone() - o.position)..normalize();
 
       o.position.setFrom(surface);
@@ -276,8 +306,6 @@ class SimulatedWorld implements ISimulatedWorld {
   }
 }
 
-const simulationSpeed = 0.1;
-
 class WorldSimulator extends StatefulWidget {
   @override
   _WorldSimulatorState createState() => _WorldSimulatorState();
@@ -286,6 +314,9 @@ class WorldSimulator extends StatefulWidget {
 class _WorldSimulatorState extends State<WorldSimulator>
     with WidgetsBindingObserver {
   final world = SimulatedWorld();
+  final cartesianController = CartesianViewplaneController();
+  final visualizationController = VectorFieldController();
+  var tool = ToolType.none;
   @override
   void initState() {
     super.initState();
@@ -296,7 +327,218 @@ class _WorldSimulatorState extends State<WorldSimulator>
     super.dispose();
   }
 
-  static const simulationStep = Duration(microseconds: 100);
+  Widget _labeledIcon(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 8.0,
+          horizontal: 4.0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon),
+            Text(label),
+          ],
+        ),
+      );
+
+  Widget _toolbar(BuildContext context) {
+    return SideToolbar(
+      width: 48,
+      radius: BorderRadius.horizontal(right: Radius.circular(24)),
+      alignment: Alignment.centerLeft,
+      children: [
+        _labeledIcon(
+          context,
+          icon: Icons.edit,
+          label: 'Tool',
+        ),
+        EnumToggleButtons<ToolType>(
+          builder: (_, e) => Icon(e.icon),
+          values: ToolType.values,
+          active: {tool},
+          onTap: (t) => setState(() => tool = t),
+          direction: Axis.vertical,
+        ),
+      ],
+    );
+  }
+
+  Widget _zoomControl(BuildContext context) {
+    const zoomStepIn = 1.3;
+    const zoomStepOut = 1 / 1.3;
+    return SideToolbar(
+      width: 48,
+      radius: BorderRadius.horizontal(left: Radius.circular(24)),
+      alignment: Alignment.centerRight,
+      children: [
+        _labeledIcon(
+          context,
+          icon: Icons.zoom_out_map,
+          label: 'Zoom',
+        ),
+        Divider(),
+        IconButton(
+          icon: Icon(Icons.zoom_in),
+          onPressed: () => cartesianController
+              .setScale(cartesianController.scale * zoomStepIn),
+        ),
+        IconButton(
+          icon: Icon(Icons.zoom_out),
+          onPressed: () => cartesianController
+              .setScale(cartesianController.scale * zoomStepOut),
+        ),
+        Divider(),
+        IconButton(
+          icon: Icon(Icons.refresh_outlined),
+          onPressed: () => cartesianController.setScale(1),
+        ),
+      ],
+    );
+  }
+
+  Widget _simulationControl(BuildContext context) {
+    return AnimatedBottomToolbar(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                'Configurações da simulação',
+                style: Theme.of(context).textTheme.headline4,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(height: 8.0),
+            Text('Velocidade', style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            Row(
+              children: [
+                Text(world.simulationSpeed.toStringAsFixed(2)),
+                Expanded(
+                  child: Slider(
+                    value: world.simulationSpeed,
+                    onChanged: (s) => setState(
+                      () => world.simulationSpeed = s,
+                    ),
+                    min: 0.1,
+                    max: 2.0,
+                    label: world.simulationSpeed.toStringAsFixed(2),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      hiddenChild: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: ListView(
+          children: [
+            Text('Gravidade', style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            Row(
+              children: [
+                Text(world.gravity.toStringAsFixed(2)),
+                Expanded(
+                  child: Slider(
+                    value: world.gravity,
+                    onChanged: (s) => setState(
+                      () => world.gravity = s,
+                    ),
+                    min: 3.0,
+                    max: 30.0,
+                    label: world.gravity.toStringAsFixed(2),
+                  ),
+                ),
+              ],
+            ),
+            Text('ΔT da simulação (µs)',
+                style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            Row(
+              children: [
+                Text(world.simulationStep.inMicroseconds.toString()),
+                Expanded(
+                  child: Slider(
+                    value: world.simulationStep.inMicroseconds.toDouble(),
+                    onChanged: (s) => setState(
+                      () => world.simulationStep =
+                          Duration(microseconds: s.toInt()),
+                    ),
+                    min: 100,
+                    max: 16000,
+                    label: world.simulationStep.inMicroseconds.toString(),
+                  ),
+                ),
+              ],
+            ),
+            Text('Ferramentas', style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            ButtonBar(
+              alignment: MainAxisAlignment.start,
+              children: [
+                TextButton(
+                    onPressed: () {
+                      world.reset();
+                      cartesianController.translateToCenter();
+                    },
+                    child: Text('Reiniciar')),
+                TextButton(
+                    onPressed: cartesianController.translateToCenter,
+                    child: Text('Centralizar'))
+              ],
+            ),
+            Text(
+              'Configurações da visualização',
+              style: Theme.of(context).textTheme.headline4,
+              textAlign: TextAlign.center,
+            ),
+            Text('Tipo', style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            EnumToggleButtons<VisualizationType>(
+              active: {visualizationController.type()},
+              builder: (_, e) => Tooltip(
+                child: Icon(e.icon),
+                message: e.text,
+              ),
+              values: VisualizationType.values,
+              onTap: visualizationController.type.set,
+            ),
+            SizedBox(height: 8.0),
+            Text('Qualidade do campo',
+                style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            EnumToggleButtons<VisualizationQuality>(
+              active: {visualizationController.quality()},
+              builder: (_, e) => Text(e.text),
+              values: VisualizationQuality.values,
+              onTap: visualizationController.quality.set,
+            ),
+            SizedBox(height: 8.0),
+            Text('Distancia do campo',
+                style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            EnumToggleButtons<VisualizationQuality>(
+              active: {visualizationController.distance()},
+              builder: (_, e) => Text(e.text),
+              values: VisualizationQuality.values,
+              onTap: visualizationController.distance.set,
+            ),
+          ],
+        ),
+      ),
+      radius: BorderRadius.vertical(top: Radius.circular(36)),
+    );
+  }
 
   Duration? _previousFrameEpoch;
 
@@ -306,10 +548,12 @@ class _WorldSimulatorState extends State<WorldSimulator>
       setState(() {});
       return;
     }
-    final dt = (epoch - _previousFrameEpoch!) * simulationSpeed;
+    final dt = (epoch - _previousFrameEpoch!) * world.simulationSpeed;
     _previousFrameEpoch = epoch;
 
-    final howManySteps = dt.inMicroseconds / simulationStep.inMicroseconds;
+    final howManySteps =
+        (dt.inMicroseconds / world.simulationStep.inMicroseconds)
+            .clamp(0.0, 16.0);
     final truncatedCount = howManySteps.toInt();
     final lastStep = howManySteps - truncatedCount;
     for (var i = 0; i < truncatedCount; i++) {
@@ -319,49 +563,302 @@ class _WorldSimulatorState extends State<WorldSimulator>
     setState(() {});
   }
 
+  void _addChargeAt(Offset pos) async {
+    final chargeMod = await showDialog<double>(
+      context: context,
+      builder: (_) => ChargeDialog(),
+    );
+    if (chargeMod == null || chargeMod.isNaN) {
+      return;
+    }
+    world.updateFixedCharges(
+      (charges) => charges.add(Charge(
+        pos.toVector2(),
+        chargeMod,
+      )),
+    );
+  }
+
+  void _addBarAt(Offset pos) async {
+    final chargeMod = await showDialog<double>(
+      context: context,
+      builder: (_) => ChargeDialog(),
+    );
+    if (chargeMod == null || chargeMod.isNaN) {
+      return;
+    }
+    world.updateBars(
+      (bars) => bars.add(ChargedBar(
+        pos.toVector2(),
+        0,
+        chargeMod,
+      )),
+    );
+  }
+
+  void _addObjectAt(Offset pos) async {
+    final data = await showDialog<ObjectDialogResult>(
+      context: context,
+      builder: (_) => ObjectDialog(),
+    );
+    if (data?.charge == null || data?.mass == null) {
+      return;
+    }
+    data!;
+    world.updateObjects(
+      (objects) => objects.add(SimulatedObject(
+        position: pos.toVector2(),
+        charge: data.charge!,
+        mass: data.mass!,
+      )),
+    );
+  }
+
+  void _useToolAt(TapUpDetails e) {
+    final pos = cartesianController.localToCartesian(e.localPosition);
+    switch (tool) {
+      case ToolType.fixedBar:
+        return _addBarAt(pos);
+      case ToolType.fixedDot:
+        return _addChargeAt(pos);
+      case ToolType.object:
+        return _addObjectAt(pos);
+      case ToolType.none:
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance!.addPostFrameCallback(_onFrame);
     return Cartesian(
+      controller: cartesianController,
       eventChildren: [
         VectorField(
           charges: world.fieldCharges,
-          type: VisualizationType.field,
+          controller: visualizationController,
         ),
         PointerHoverVectorViewer(
           vectorAt: world.electricFieldAtPoint,
         ),
+        Positioned.fill(
+          child: GestureDetector(
+            onTapUp: _useToolAt,
+          ),
+        )
       ],
       children: [
         ...world.fixedCharges.map(
           (e) => ModifiableCharge(
-            charge: e,
-            onUpdate: (ne) => setState(
-              () => e
-                ..mod = ne.mod
-                ..position.setFrom(ne.position),
-            ),
-            onRemove: () => setState(() => world.updateFixedCharges(
-                  (charges) => charges.remove(e),
-                )),
-          ),
+              charge: e,
+              onUpdate: (ne) => setState(
+                    () => e
+                      ..mod = ne.mod
+                      ..position.setFrom(ne.position),
+                  ),
+              onRemove: () => setState(
+                    () => world
+                        .updateFixedCharges((charges) => charges.remove(e)),
+                  )),
         ),
         ...world.bars.map(
           (e) => ModifiableChargedBar(
-            bar: e,
-            onUpdate: (bar) => setState(() => world.updateBar(
-                  () => e.setFrom(bar),
-                )),
-            onRemove: () => setState(() => world.updateBars(
-                  (bars) => bars.remove(e),
-                )),
+              bar: e,
+              onUpdate: (bar) => setState(() => world.updateBar(
+                    () => e.setFrom(bar),
+                  )),
+              onRemove: () => setState(
+                    () => world.updateBars((bars) => bars.remove(e)),
+                  )),
+        ),
+        ...world.objects.map(
+          (o) => ModifiableObject(
+              object: o,
+              simulationSpeed: world.simulationSpeed,
+              onRemove: () => setState(
+                    () => world.updateObjects((objs) => objs.remove(e)),
+                  )),
+        ),
+        _toolbar(context),
+        _zoomControl(context),
+        _simulationControl(context),
+      ],
+    );
+  }
+}
+
+class EnumToggleButtons<T> extends StatelessWidget {
+  const EnumToggleButtons({
+    Key? key,
+    required this.builder,
+    this.active = const {},
+    required this.values,
+    this.onTap,
+    this.direction = Axis.horizontal,
+  });
+
+  final Widget Function(BuildContext, T) builder;
+  final Set<T> active;
+  final List<T> values;
+  final ValueChanged<T>? onTap;
+  final Axis direction;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToggleButtons(
+      children: values.map((e) => builder(context, e)).toList(),
+      isSelected: values.map(active.contains).toList(),
+      onPressed: (i) => onTap?.call(values[i]),
+      direction: direction,
+    );
+  }
+}
+
+class AnimatedBottomToolbar extends StatefulWidget {
+  final Widget child;
+  final Widget hiddenChild;
+  final BorderRadius radius;
+
+  const AnimatedBottomToolbar({
+    Key? key,
+    required this.child,
+    required this.hiddenChild,
+    required this.radius,
+  }) : super(key: key);
+  @override
+  _AnimatedSideToolbarState createState() => _AnimatedSideToolbarState();
+}
+
+class _AnimatedSideToolbarState extends State<AnimatedBottomToolbar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+        vsync: this,
+        duration: Duration(
+          milliseconds: 400,
+        ));
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _controller.dispose();
+  }
+
+  void _toggle() {
+    if (_controller.isDismissed) {
+      _controller.forward();
+      return;
+    }
+    _controller.reverse();
+    return;
+  }
+
+  Widget _toggleButton() {
+    return SizedBox(
+      height: 16.0,
+      width: double.infinity,
+      child: InkWell(
+        onTap: _toggle,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (_, child) =>
+              Transform.rotate(angle: _controller.value * pi, child: child),
+          child: FittedBox(
+            fit: BoxFit.fitHeight,
+            child: Icon(Icons.arrow_drop_up),
           ),
         ),
-        ...world.objects.map((o) {
-          //print('Flutter object with pos: ${o.position}');
-          return ModifiableObject(object: o);
-        }),
-      ],
+      ),
+    );
+  }
+
+  Widget _hiddenWrapper() {
+    final animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+    final sheetHeight = MediaQuery.of(context).size.height / 3;
+    return LayoutBuilder(
+      builder: (_, constraints) => AnimatedBuilder(
+        animation: animation,
+        builder: (_, child) => ClipRect(
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            height: sheetHeight * animation.value,
+            child: child,
+          ),
+        ),
+        child: OverflowBox(
+          minWidth: constraints.minWidth,
+          minHeight: sheetHeight,
+          maxWidth: constraints.maxWidth,
+          maxHeight: sheetHeight,
+          child: widget.hiddenChild,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Material(
+        shape: RoundedRectangleBorder(borderRadius: widget.radius),
+        clipBehavior: Clip.antiAlias,
+        elevation: 8.0,
+        child: ConstrainedBox(
+          constraints: BoxConstraints.loose(
+              Size.fromHeight(MediaQuery.of(context).size.height)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _toggleButton(),
+              widget.child,
+              _hiddenWrapper(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SideToolbar extends StatelessWidget {
+  final List<Widget> children;
+  final AlignmentGeometry alignment;
+  final BorderRadius radius;
+  final double width;
+
+  const SideToolbar({
+    Key? key,
+    required this.alignment,
+    required this.radius,
+    required this.width,
+    required this.children,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: SizedBox(
+        width: width,
+        child: Material(
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          clipBehavior: Clip.antiAlias,
+          elevation: 8.0,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
+        ),
+      ),
     );
   }
 }

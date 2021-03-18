@@ -9,18 +9,12 @@ import '../phis.dart';
 
 class VectorField extends StatefulWidget {
   final List<Charge> charges;
-  final VisualizationType type;
-  final VisualizationQuality distance;
-  final VisualizationQuality quality;
-  final VectorFieldController? controller;
+  final VectorFieldController controller;
 
   const VectorField({
     Key? key,
     required this.charges,
-    this.type = VisualizationType.field,
-    this.distance = VisualizationQuality.low,
-    this.quality = VisualizationQuality.low,
-    this.controller,
+    required this.controller,
   }) : super(key: key);
 
   @override
@@ -72,6 +66,7 @@ class VectorFieldController extends PropController {
             }
           }()))
         ..addManager(this);
+  late final type = ValueProp(VisualizationType.field)..addManager(this);
 }
 
 bool listEqualsNotIdentical<T>(List<T>? a, List<T>? b) {
@@ -84,13 +79,14 @@ bool listEqualsNotIdentical<T>(List<T>? a, List<T>? b) {
 }
 
 class _VectorFieldState extends State<VectorField> {
-  late final controller = widget.controller ?? VectorFieldController();
+  late final controller = widget.controller;
   void initState() {
     super.initState();
     controller.charges.set(widget.charges.map((e) => e.copy()).toList(), false);
-    controller.distance.set(widget.distance, false);
-    controller.quality.set(widget.quality, false);
-    controller.addListener(() => setState(() {}));
+
+    controller.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -99,22 +95,25 @@ class _VectorFieldState extends State<VectorField> {
     if (!listEquals(controller.charges(), widget.charges)) {
       controller.charges.set(widget.charges.map((e) => e.copy()).toList());
     }
-    controller.distance.set(widget.distance, false);
-    controller.quality.set(widget.quality, false);
   }
 
   CartesianPainter _painter() {
-    switch (widget.type) {
+    switch (controller.type()) {
       case VisualizationType.field:
         return ChargeFieldPainter(
             controller.charges(), controller.field(), Color(0xFFcccc00), 1.0);
       case VisualizationType.gradient:
         return VectorFieldPainter(controller.charges());
+      default:
+        throw UnimplementedError();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (controller.type() == VisualizationType.none) {
+      return SizedBox();
+    }
     return CartesianPaint(painter: _painter());
   }
 }

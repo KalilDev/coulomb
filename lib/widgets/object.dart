@@ -10,12 +10,14 @@ import 'charge.dart';
 
 class ModifiableObject extends StatefulWidget {
   final SimulatedObject object;
+  final double? simulationSpeed;
   final VoidCallback? onRemove;
   final CartesianViewplaneController? controller;
 
   const ModifiableObject({
     Key? key,
     required this.object,
+    this.simulationSpeed,
     this.onRemove,
     this.controller,
   }) : super(key: key);
@@ -150,6 +152,22 @@ class ObjectDialogResult {
   ObjectDialogResult(this.mass, this.charge) : delete = false;
 }
 
+class _PointerMove {
+  final Vector2 distance = Vector2.zero();
+  final DateTime start;
+  final DateTime end;
+
+  _PointerMove(
+    Vector2 dist,
+    this.start,
+    this.end,
+  ) {
+    distance.add(dist);
+  }
+  Duration get deltaTime => end.difference(start);
+  double get dtSeconds => deltaTime.inMicroseconds / 1000000;
+}
+
 class _ModifiableObjectState extends State<ModifiableObject> {
   SimulatedObject get object => widget.object;
   VoidCallback _openChangeDialog(BuildContext context) => () async {
@@ -167,7 +185,7 @@ class _ModifiableObjectState extends State<ModifiableObject> {
         }
 
         if (result.delete) {
-          widget.onRemove!();
+          widget.onRemove?.call();
           return;
         }
 
@@ -179,46 +197,56 @@ class _ModifiableObjectState extends State<ModifiableObject> {
       };
 
   late DateTime lastContact;
-  final lastVelocities = <Vector2>[];
+  final lastMoves = <_PointerMove>[];
 
-  @override
   void _onMoveEnd(Vector2? pos) {
     if (pos == null) {
       object.simulating = true;
       object.velocity.setZero();
-      lastVelocities.clear();
+      lastMoves.clear();
       return;
     }
-    final taken = lastVelocities.reversed.take(10).toList();
-    object.velocity.setZero();
-    for (final partial in taken) {
-      object.velocity.add(partial..scale(simulationSpeed / taken.length));
-    }
+    final now = DateTime.now();
+    lastMoves.add(_PointerMove(
+      pos.clone() - object.position,
+      lastContact,
+      now,
+    ));
+    const halfSec = Duration(milliseconds: 500);
+
+    final distanceAndDt = lastMoves.reversed
+        .takeWhile((move) => now.difference(move.start).abs() <= halfSec)
+        .fold<List<dynamic>>(
+            [Vector2.zero(), 0.0],
+            (state, move) => state
+              ..[0].add(move.distance)
+              ..[1] += move.dtSeconds);
+    final deltaV = distanceAndDt[0] / distanceAndDt[1];
+    final simulationSpeed = widget.simulationSpeed ?? 1.0;
+    object.velocity.setFrom(deltaV / simulationSpeed);
+
     object.simulating = true;
-    lastVelocities.clear();
+    lastMoves.clear();
   }
 
-  @override
   void _onMoveStart() {
-    lastVelocities.clear();
+    lastMoves.clear();
     object.simulating = false;
     lastContact = DateTime.now();
   }
 
-  @override
   void _onMove(Vector2 pos) {
+    final moveStarted = lastContact;
+    final moveFinished = DateTime.now();
     final delta = pos.clone() - object.position;
 
     object.position.setFrom(pos);
 
     // Calc time delta
-    final deltaT = DateTime.now().difference(lastContact);
-    final dt = deltaT.inMicroseconds / 1000000;
-
     object.position.add(delta);
-    lastContact = DateTime.now();
+    lastMoves.add(_PointerMove(delta, moveStarted, moveFinished));
 
-    lastVelocities.add(delta / dt);
+    lastContact = DateTime.now();
   }
 
   @override
@@ -260,7 +288,8 @@ class SimulatedObjectWidget extends StatelessWidget with PreferredSizeWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               'Mass: ${object.mass}\n'
-              'Charge: ${object.charge}',
+              'Charge: ${object.charge}\n'
+              'Velocity:\n[${object.velocity.x.toStringAsFixed(2)}, ${object.velocity.y.toStringAsFixed(2)}]\n',
             ),
           ),
         ),

@@ -138,6 +138,15 @@ class CartesianViewplaneController extends ChangeNotifier with PropScope {
     }
   }
 
+  void translateToCenter() {
+    _resetTransform(
+      Offset(
+        viewSize.width / 2,
+        -viewSize.height / 2,
+      ),
+    );
+  }
+
   void setScaleAndTranslation(double s, Offset t) {
     _scale.set(s, false);
     _resetTransform(t);

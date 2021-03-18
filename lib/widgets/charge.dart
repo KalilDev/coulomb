@@ -41,20 +41,24 @@ class ChargeDialog extends StatefulWidget {
 }
 
 class _ChargeDialogState extends State<ChargeDialog> {
-  /*llate*/ TextEditingController? controller;
+  late TextEditingController controller;
+  bool? _chargeValid;
   @override
   void initState() {
-    controller = TextEditingController(
-        text: widget.initialValue == null
-            ? null
-            : widget.initialValue.toString());
+    controller = TextEditingController(text: widget.initialValue?.toString());
+    controller.addListener(_validateCharge);
     super.initState();
   }
 
   @override
   void dispose() {
-    controller!.dispose();
+    controller.dispose();
     super.dispose();
+  }
+
+  void _validateCharge() {
+    _chargeValid = double.tryParse(controller.text) != null;
+    setState(() {});
   }
 
   @override
@@ -69,7 +73,7 @@ class _ChargeDialogState extends State<ChargeDialog> {
         decoration: InputDecoration(
           filled: true,
           labelText: 'Carga',
-          //errorText: 'Carga inválida!',
+          errorText: _chargeValid == false ? 'Carga inválida!' : null,
         ),
         controller: controller,
         onSubmitted: (r) =>
@@ -85,7 +89,7 @@ class _ChargeDialogState extends State<ChargeDialog> {
             child: Text('CANCELAR')),
         TextButton(
             onPressed: () => Navigator.pop(context,
-                double.tryParse(controller!.value.text) ?? widget.initialValue),
+                double.tryParse(controller.value.text) ?? widget.initialValue),
             child: Text('OK')),
       ],
     );
@@ -184,7 +188,7 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
           Offset(chargeRadius as double, -chargeRadius),
       child: Material(
         color: color,
-        elevation: 4,
+        elevation: 2,
         shape: CircleBorder(),
         child: InkWell(
           customBorder: CircleBorder(),
