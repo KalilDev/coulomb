@@ -1,33 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../phis.dart';
-import '../util.dart';
 import 'cartesian.dart';
-import 'package:vector_math/vector_math_64.dart' hide Colors;
-import 'package:coulomb/vec_conversion.dart';
+
+import 'cartesian_movable.dart';
 
 Color chargeColor(double charge) => charge > 0
     ? Colors.blue
     : charge == 0
         ? Colors.grey
         : Colors.red;
-
-class ModifiableCharge extends StatefulWidget {
-  final Charge charge;
-  final ValueChanged<Charge>? onUpdate;
-  final VoidCallback? onRemove;
-  final CartesianViewplaneController? controller;
-
-  const ModifiableCharge({
-    Key? key,
-    required this.charge,
-    this.onUpdate,
-    this.onRemove,
-    this.controller,
-  }) : super(key: key);
-  @override
-  _ModifiableChargeState createState() => _ModifiableChargeState();
-}
 
 class ChargeDialog extends StatefulWidget {
   final double? initialValue;
@@ -96,59 +78,26 @@ class _ChargeDialogState extends State<ChargeDialog> {
   }
 }
 
-class _ChargeDragManager extends PointerDragManager {
-  final CartesianViewplaneController controller;
-  final Charge initialCharge;
-  final ValueChanged<Charge?> onInternalUpdate;
-  final ValueChanged<Charge>? onChanged;
+class ModifiableCharge extends StatefulWidget {
+  final Charge charge;
+  final ValueChanged<Charge>? onUpdate;
+  final VoidCallback? onRemove;
+  final CartesianViewplaneController? controller;
 
-  _ChargeDragManager(
+  const ModifiableCharge({
+    Key? key,
+    required this.charge,
+    this.onUpdate,
+    this.onRemove,
     this.controller,
-    this.initialCharge,
-    this.onInternalUpdate,
-    this.onChanged,
-  );
-  late Vector2 _position;
-
+  }) : super(key: key);
   @override
-  void pointerCancel(PointerCancelEvent event) {
-    onInternalUpdate(null);
-  }
-
-  @override
-  void pointerDown(PointerDownEvent event) {
-    onInternalUpdate(Charge(
-      _position = initialCharge.position.clone(),
-      initialCharge.mod,
-    ));
-  }
-
-  @override
-  void pointerMove(PointerMoveEvent e) {
-    var point = Vector4(e.delta.dx, e.delta.dy, 0, 0);
-    point = controller.untransform.transform(point);
-
-    onInternalUpdate(Charge(
-      _position..add(point.toVector2()),
-      initialCharge.mod,
-    ));
-  }
-
-  @override
-  void pointerUp(PointerUpEvent event) {
-    onChanged?.call(Charge(_position, initialCharge.mod));
-    onInternalUpdate(null);
-  }
+  _ModifiableChargeState createState() => _ModifiableChargeState();
 }
 
 class _ModifiableChargeState extends State<ModifiableCharge> {
   Charge? _charge;
   Charge get charge => _charge ?? widget.charge;
-  Color get color => charge.mod > 0
-      ? Colors.blue
-      : charge.mod == 0
-          ? Colors.grey
-          : Colors.red;
 
   VoidCallback _openChangeDialog(BuildContext context) => () async {
         final result = await showDialog<double>(
@@ -161,56 +110,59 @@ class _ModifiableChargeState extends State<ModifiableCharge> {
         }
 
         if (result.isNaN) {
-          widget.onRemove!();
+          widget.onRemove?.call();
           return;
         }
 
-        widget.onUpdate!(Charge(charge.position, result));
+        widget.onUpdate?.call(Charge(charge.position, result));
         return;
       };
 
-  PointerDragManager? _createDragManager(PointerEvent e) {
-    if (e is PointerDownEvent) {
-      return _ChargeDragManager(
-        widget.controller ?? CartesianViewplaneController.of(context),
-        widget.charge,
-        (charge) => setState(() => _charge = charge),
-        widget.onUpdate,
-      );
-    }
+  @override
+  Widget build(BuildContext context) {
+    return CartesianMovableWidget(
+      position: charge.position,
+      onMoveEnd: (p) =>
+          widget.onUpdate?.call(charge.copy()..position.setFrom(p)),
+      child: ChargeWidget(
+        charge: charge,
+        onTap: _openChangeDialog(context),
+      ),
+    );
   }
+}
+
+class ChargeWidget extends StatelessWidget with PreferredSizeWidget {
+  final Charge charge;
+  final VoidCallback? onTap;
+
+  const ChargeWidget({
+    Key? key,
+    required this.charge,
+    this.onTap,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final num chargeRadius = charge.mod.abs().clamp(3.0, double.infinity);
-    return CartesianWidget(
-      position: charge.position.toOffset() -
-          Offset(chargeRadius as double, -chargeRadius),
-      child: Material(
-        color: color,
-        elevation: 2,
-        shape: CircleBorder(),
-        child: InkWell(
-          customBorder: CircleBorder(),
-          onTap: _openChangeDialog(context),
-          child: ManagedListener(
-            behavior: HitTestBehavior.opaque,
-            createManager: _createDragManager,
-            child: AbsorbPointer(
-              child: SizedBox(
-                height: 2 * chargeRadius,
-                width: 2 * chargeRadius,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    charge.mod.toString(),
-                  ),
-                ),
-              ),
-            ),
+    return Material(
+      elevation: 2.0,
+      color: chargeColor(charge.mod),
+      shape: CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            charge.mod.toString(),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  Size get preferredSize {
+    final chargeRadius = charge.mod.abs().clamp(3.0, double.infinity);
+    return Size.square(chargeRadius * 2);
   }
 }

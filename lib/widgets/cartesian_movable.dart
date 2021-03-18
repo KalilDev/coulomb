@@ -108,10 +108,8 @@ class _CartesianMovableWidgetState extends State<CartesianMovableWidget> {
     final halfSize = (size / 2).toOffset().scale(1, -1);
     return CartesianWidget(
       position: position.toOffset() - halfSize,
-      child: Container(
-        foregroundDecoration: BoxDecoration(border: Border.all()),
-        height: size.height,
-        width: size.width,
+      child: SizedBox.fromSize(
+        size: size,
         child: ManagedListener(
           behavior: HitTestBehavior.translucent,
           createManager: _createDragManager,

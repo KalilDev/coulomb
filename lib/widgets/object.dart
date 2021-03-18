@@ -10,14 +10,12 @@ import 'charge.dart';
 
 class ModifiableObject extends StatefulWidget {
   final SimulatedObject object;
-  final double? simulationSpeed;
   final VoidCallback? onRemove;
   final CartesianViewplaneController? controller;
 
   const ModifiableObject({
     Key? key,
     required this.object,
-    this.simulationSpeed,
     this.onRemove,
     this.controller,
   }) : super(key: key);
@@ -222,8 +220,7 @@ class _ModifiableObjectState extends State<ModifiableObject> {
               ..[0].add(move.distance)
               ..[1] += move.dtSeconds);
     final deltaV = distanceAndDt[0] / distanceAndDt[1];
-    final simulationSpeed = widget.simulationSpeed ?? 1.0;
-    object.velocity.setFrom(deltaV / simulationSpeed);
+    object.velocity.setFrom(deltaV);
 
     object.simulating = true;
     lastMoves.clear();

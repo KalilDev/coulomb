@@ -1,6 +1,6 @@
 import 'package:coulomb/drawing.dart';
-import 'package:coulomb/main.dart';
 import 'package:coulomb/widgets/cartesian.dart';
+import 'package:coulomb/widgets/phis.dart';
 import 'package:coulomb/widgets/props.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';

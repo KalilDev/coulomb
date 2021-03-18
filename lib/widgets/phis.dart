@@ -1,10 +1,7 @@
 import 'dart:collection';
-import 'dart:developer';
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:coulomb/drawing.dart';
-import 'package:coulomb/main.dart';
 import 'package:coulomb/widgets/cartesian.dart';
 import 'package:coulomb/widgets/charge.dart';
 import 'package:coulomb/widgets/vector_field.dart';
@@ -17,6 +14,67 @@ import '../phis.dart';
 import 'charge_bar.dart';
 import 'pointer_hover.dart';
 import 'object.dart';
+
+enum VisualizationType {
+  gradient,
+  field,
+  none,
+}
+
+extension VisualizationTypeE on VisualizationType {
+  String get text => _text[this]!;
+  IconData get icon => _icon[this]!;
+
+  static const _text = {
+    VisualizationType.field: 'Gradiente de vetores',
+    VisualizationType.gradient: 'Campo elétrico',
+    VisualizationType.none: 'Nenhuma',
+  };
+
+  static const _icon = {
+    VisualizationType.field: Icons.arrow_right_alt,
+    VisualizationType.gradient: Icons.blur_linear,
+    VisualizationType.none: Icons.highlight_off,
+  };
+}
+
+enum VisualizationQuality { low, medium, high }
+
+extension VisualizationQualityE on VisualizationQuality {
+  String get text => _text[this]!;
+
+  static const _text = {
+    VisualizationQuality.low: 'Baixa',
+    VisualizationQuality.medium: 'Média',
+    VisualizationQuality.high: 'Alta',
+  };
+}
+
+enum ToolType {
+  fixedBar,
+  fixedDot,
+  object,
+  none,
+}
+
+extension ToolTypeE on ToolType {
+  String get text => _text[this]!;
+  IconData get icon => _icon[this]!;
+
+  static const _text = {
+    ToolType.none: 'Navegar',
+    ToolType.fixedDot: 'Carga circular fixa',
+    ToolType.fixedBar: 'Carga em barra fixa',
+    ToolType.object: 'Objeto físico',
+  };
+
+  static const _icon = {
+    ToolType.none: Icons.near_me_outlined,
+    ToolType.fixedDot: Icons.add_circle_outline,
+    ToolType.fixedBar: Icons.add_box_outlined,
+    ToolType.object: Icons.add_circle_rounded,
+  };
+}
 
 class ChargedBar implements ChargedObject {
   final Vector2 position = Vector2.zero();
@@ -358,7 +416,10 @@ class _WorldSimulatorState extends State<WorldSimulator>
           label: 'Tool',
         ),
         EnumToggleButtons<ToolType>(
-          builder: (_, e) => Icon(e.icon),
+          builder: (_, e) => Tooltip(
+            message: e.text,
+            child: Icon(e.icon),
+          ),
           values: ToolType.values,
           active: {tool},
           onTap: (t) => setState(() => tool = t),
@@ -382,20 +443,29 @@ class _WorldSimulatorState extends State<WorldSimulator>
           label: 'Zoom',
         ),
         Divider(),
-        IconButton(
-          icon: Icon(Icons.zoom_in),
-          onPressed: () => cartesianController
-              .setScale(cartesianController.scale * zoomStepIn),
+        Tooltip(
+          message: 'Aumentar zoom',
+          child: IconButton(
+            icon: Icon(Icons.zoom_in),
+            onPressed: () => cartesianController
+                .setScale(cartesianController.scale * zoomStepIn),
+          ),
         ),
-        IconButton(
-          icon: Icon(Icons.zoom_out),
-          onPressed: () => cartesianController
-              .setScale(cartesianController.scale * zoomStepOut),
+        Tooltip(
+          message: 'Diminuir zoom',
+          child: IconButton(
+            icon: Icon(Icons.zoom_out),
+            onPressed: () => cartesianController
+                .setScale(cartesianController.scale * zoomStepOut),
+          ),
         ),
         Divider(),
-        IconButton(
-          icon: Icon(Icons.refresh_outlined),
-          onPressed: () => cartesianController.setScale(1),
+        Tooltip(
+          message: 'Resetar zoom',
+          child: IconButton(
+            icon: Icon(Icons.refresh_outlined),
+            onPressed: () => cartesianController.setScale(1),
+          ),
         ),
       ],
     );
@@ -413,7 +483,7 @@ class _WorldSimulatorState extends State<WorldSimulator>
               width: double.infinity,
               child: Text(
                 'Configurações da simulação',
-                style: Theme.of(context).textTheme.headline4,
+                style: Theme.of(context).textTheme.headline5,
                 textAlign: TextAlign.center,
               ),
             ),
@@ -499,7 +569,7 @@ class _WorldSimulatorState extends State<WorldSimulator>
             ),
             Text(
               'Configurações da visualização',
-              style: Theme.of(context).textTheme.headline4,
+              style: Theme.of(context).textTheme.headline5,
               textAlign: TextAlign.center,
             ),
             Text('Tipo', style: Theme.of(context).textTheme.subtitle1),
@@ -674,7 +744,6 @@ class _WorldSimulatorState extends State<WorldSimulator>
         ...world.objects.map(
           (o) => ModifiableObject(
               object: o,
-              simulationSpeed: world.simulationSpeed,
               onRemove: () => setState(
                     () => world.updateObjects((objs) => objs.remove(e)),
                   )),
@@ -760,7 +829,7 @@ class _AnimatedSideToolbarState extends State<AnimatedBottomToolbar>
 
   Widget _toggleButton() {
     return SizedBox(
-      height: 16.0,
+      height: 32.0,
       width: double.infinity,
       child: InkWell(
         onTap: _toggle,
