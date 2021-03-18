@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:coulomb/vec_conversion.dart';
 
+import '../util.dart';
+import 'workaround.dart';
+
 class CartesianWidget extends StatelessWidget {
   final Offset position;
   final Widget child;
@@ -20,6 +23,14 @@ class CartesianWidget extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (_, child) {
+        if (position.dx.isNaN ||
+            position.dx.isInfinite ||
+            position.dy.isNaN ||
+            position.dy.isInfinite) {
+          return Offstage(
+            child: child,
+          );
+        }
         final m = Matrix4.identity()
           ..multiply(controller.transform)
           ..translate(position.dx, position.dy)
@@ -46,52 +57,24 @@ class _CartesianScope extends InheritedWidget {
 }
 
 class Cartesian extends StatefulWidget {
-  final List<Widget> children;
-  final List<CartesianPainter> painters;
-  final List<CartesianPainter> foregroundPainters;
+  final List<Widget>? children;
+
+  /// Children which will all receive the events from the plane
+  final List<Widget>? eventChildren;
   final CartesianViewplaneController? controller;
 
-  const Cartesian({
-    Key? key,
-    this.children = const [],
-    this.painters = const [],
-    this.foregroundPainters = const [],
-    this.controller,
-  }) : super(key: key);
+  Cartesian(
+      {Key? key,
+      Widget? child,
+      List<Widget>? children,
+      this.controller,
+      this.eventChildren})
+      : assert(child == null || children == null),
+        children = children ?? (child == null ? null : [child]),
+        super(key: key);
 
   @override
   _CartesianState createState() => _CartesianState();
-}
-
-class PropWidget extends StatefulWidget {
-  final WidgetBuilder builder;
-
-  const PropWidget({Key? key, required this.builder}) : super(key: key);
-  @override
-  _PropWidgetState createState() => _PropWidgetState();
-}
-
-class _PropWidgetState extends State<PropWidget> with PropScope {
-  late final child = GetterProp<Widget>(() => Builder(builder: widget.builder))
-    ..addManager(this);
-  var _isInBuild = false;
-
-  @override
-  void onPropsChanged() {
-    if (_isInBuild) {
-      return;
-    }
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _isInBuild = true;
-    final result = child();
-    _isInBuild = false;
-
-    return result;
-  }
 }
 
 class CartesianViewplaneController extends ChangeNotifier with PropScope {
@@ -218,35 +201,35 @@ class _CartesianState extends State<Cartesian> {
     }
   }
 
-  List<CartesianPainter> get _painters => [
-        _CartesianPlanePainter(
-          Theme.of(context).colorScheme.onSurface,
-          Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-        ),
-        ...widget.painters,
-      ];
-  Widget _buildView(BuildContext context) => ClipRect(
-        child: Stack(
-          children: [
-            for (final p in _painters) _wrapPainter(p),
-            for (final w in widget.children) w,
-            for (final p in widget.foregroundPainters) _wrapPainter(p),
-          ],
-        ),
-      );
+  double? _baseScale;
+  Offset? _initialTranslation;
+  Offset? _initialFocalPoint;
+  void _scaleEnd(ScaleEndDetails details) {
+    _baseScale = null;
+    _initialTranslation = null;
+    _initialFocalPoint = null;
+  }
 
-  AnimatedBuilder _wrapPainter(CartesianPainter p) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (_, __) => CustomPaint(
-        painter: _CartesianPainter(
-          Matrix4.copy(_controller.transform),
-          _controller.canvasInfo,
-          p,
-        ),
-        size: _controller.viewSize,
-      ),
+  void _scaleUpdate(ScaleUpdateDetails details) {
+    final focusDelta = details.localFocalPoint - _initialFocalPoint!;
+    final translation = _initialTranslation! + focusDelta.scale(1, -1);
+    final scale = (_baseScale! * details.scale).clamp(0.4, 15.0);
+    _controller.setScaleAndTranslation(
+      scale,
+      translation,
     );
+  }
+
+  void _scaleStart(ScaleStartDetails details) {
+    _baseScale = _controller.scale;
+    _initialTranslation = _controller.translation;
+    _initialFocalPoint = details.localFocalPoint;
+  }
+
+  PointerManager? _createTranslationManager(PointerEvent e) {
+    if (e is PointerDownEvent) {
+      return _TranslationDragManager(_controller);
+    }
   }
 
   @override
@@ -255,9 +238,70 @@ class _CartesianState extends State<Cartesian> {
       _controller.setSize(constraints.biggest);
       return _CartesianScope(
         controller: _controller,
-        child: _buildView(context),
+        child: Stack(children: [
+          CartesianPaint(
+            painter: _CartesianPlanePainter(
+              Theme.of(context).colorScheme.onSurface,
+              Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+          Positioned.fill(
+            child: StackWithAllChildrenReceiveEvents(
+              children: [
+                Positioned.fill(
+                  child: ManagedListener(
+                    createManager: _createTranslationManager,
+                    behavior: HitTestBehavior.translucent,
+                  ),
+                ),
+                Positioned.fill(
+                  child: GestureDetector(
+                    onScaleStart: _scaleStart,
+                    onScaleUpdate: _scaleUpdate,
+                    onScaleEnd: _scaleEnd,
+                    behavior: HitTestBehavior.translucent,
+                  ),
+                ),
+                ...?widget.eventChildren
+              ],
+            ),
+          ),
+          ...?widget.children,
+        ]),
       );
     });
+  }
+}
+
+class _TranslationDragManager extends PointerDragManager {
+  final CartesianViewplaneController controller;
+
+  _TranslationDragManager(this.controller);
+
+  Offset? _initialTranslation;
+
+  @override
+  void pointerCancel(PointerCancelEvent event) {
+    if (_initialTranslation == null) {
+      return;
+    }
+    controller.setTranslation(_initialTranslation!);
+    _initialTranslation = null;
+  }
+
+  @override
+  void pointerDown(PointerDownEvent event) {
+    _initialTranslation = controller.translation;
+  }
+
+  @override
+  void pointerMove(PointerMoveEvent event) {
+    controller.addTranslation(event.delta.scale(1, -1));
+  }
+
+  @override
+  void pointerUp(PointerUpEvent event) {
+    _initialTranslation = null;
   }
 }
 
@@ -320,6 +364,75 @@ class _CartesianPlanePainter extends CartesianPainter {
   @override
   bool shouldRepaint(_CartesianPlanePainter old) =>
       color != old.color || gridColor != old.gridColor;
+}
+
+class MultiCartesianPaint extends StatelessWidget {
+  final List<CartesianPainter> painters;
+  final Widget? child;
+  final List<CartesianPainter>? foregroundPainters;
+  final Clip? clip;
+
+  const MultiCartesianPaint({
+    Key? key,
+    required this.painters,
+    this.child,
+    this.foregroundPainters,
+    this.clip,
+  }) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    final widget = StackWithAllChildrenReceiveEvents(
+      children: [
+        ...painters.map((e) => CartesianPaint(painter: e)),
+        if (child != null) Positioned.fill(child: child!),
+        ...?foregroundPainters?.map((e) => CartesianPaint(painter: e))
+      ],
+    );
+    if (clip == null) {
+      return widget;
+    }
+    return ClipRect(
+      child: widget,
+      clipBehavior: clip!,
+    );
+  }
+}
+
+class CartesianPaint extends StatelessWidget {
+  final CartesianPainter painter;
+  final Widget? child;
+  final Clip? clip;
+
+  const CartesianPaint({
+    Key? key,
+    required this.painter,
+    this.child,
+    this.clip,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = CartesianViewplaneController.of(context);
+    final widget = AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) => CustomPaint(
+        painter: _CartesianPainter(
+          Matrix4.copy(controller.transform),
+          controller.canvasInfo,
+          painter,
+        ),
+        child: child,
+        size: controller.viewSize,
+      ),
+    );
+    if (clip == null) {
+      return widget;
+    }
+    return ClipRect(
+      child: child,
+      clipBehavior: clip!,
+    );
+  }
 }
 
 class CartesianCanvasInfo {

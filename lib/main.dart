@@ -3,6 +3,7 @@ import 'package:coulomb/drawing.dart';
 import 'package:coulomb/phis.dart';
 import 'package:coulomb/util.dart';
 import 'package:coulomb/widgets/charge.dart';
+import 'package:coulomb/widgets/phis.dart';
 import 'package:coulomb/widgets/props.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -62,19 +63,28 @@ extension on VisualizationQuality {
   }
 }
 
+enum ToolType {
+  fixedBar,
+  fixedDot,
+  object,
+  none,
+}
+
 class ChargesContainerController extends PropController {
   ChargesContainerController() {
     cartesianController().addListener(cartesianController.notifyDependents);
   }
   late final cartesianController = ValueProp(CartesianViewplaneController())
     ..addManager(this);
-  late final charges = ValueProp([
+  late final staticCharges = ValueProp([
     Charge(
       Vector2(-25, 10),
       10,
     ),
     Charge(Vector2(25, 10), -20)
   ])
+    ..addManager(this);
+  late final charges = GetterProp<List<Charge>>(() => staticCharges())
     ..addManager(this);
   late final type = ValueProp(VisualizationType.field)..addManager(this);
   late final quality = ValueProp(VisualizationQuality.low)..addManager(this);
@@ -128,31 +138,14 @@ class ChargesContainerController extends PropController {
           ))
       .toList())
     ..addManager(this);
+  late final toolType = ValueProp(ToolType.fixedDot)..addManager(this);
 }
 
 class _ChargesContainerState extends State<ChargesContainer> {
   late final _controller = ChargesContainerController()
     ..addListener(() => setState(() {}));
 
-  PointerManager? _createGestureManager(PointerEvent e) {
-    if (e is PointerHoverEvent) {
-      final pointer = e.pointer;
-      return _VectorHoverManager(
-        () =>
-            _controller._pointerPositions.update((pos) => pos.remove(pointer)),
-        (pos) => _controller._pointerPositions.update(
-          (positions) => positions[pointer] = pos,
-        ),
-      );
-    }
-    if (e is PointerDownEvent) {
-      return _TranslationDragManager(_controller.cartesianController());
-    }
-  }
-
-  void _onAddCharge(TapUpDetails e) async {
-    final chargePos =
-        _controller.cartesianController().localToCartesian(e.localPosition);
+  void _addChargeAt(Offset pos, [bool bar = false]) async {
     final chargeMod = await showDialog<double>(
       context: context,
       builder: (_) => ChargeDialog(),
@@ -160,40 +153,37 @@ class _ChargesContainerState extends State<ChargesContainer> {
     if (chargeMod == null || chargeMod.isNaN) {
       return;
     }
-    _controller.charges.update(
+    _controller.staticCharges.update(
       (charges) => charges.add(Charge(
-        chargePos.toVector2(),
+        pos.toVector2(),
         chargeMod,
       )),
     );
   }
 
-  double? _baseScale;
-  Offset? _initialTranslation;
-  Offset? _initialFocalPoint;
-  void _scaleEnd(ScaleEndDetails details) {
-    _baseScale = null;
-    _initialTranslation = null;
-    _initialFocalPoint = null;
-  }
-
-  void _scaleUpdate(ScaleUpdateDetails details) {
-    final focusDelta = details.localFocalPoint - _initialFocalPoint!;
-    final translation = _initialTranslation! + focusDelta.scale(1, -1);
-    final num scale = (_baseScale! * details.scale).clamp(0.4, 15.0);
-    _controller
-        .cartesianController()
-        .setScaleAndTranslation(scale as double, translation);
-  }
-
-  void _scaleStart(ScaleStartDetails details) {
-    _baseScale = _controller.cartesianController().scale;
-    _initialTranslation = _controller.cartesianController().translation;
-    _initialFocalPoint = details.localFocalPoint;
+  void _onToolUp(TapUpDetails e) {
+    final pos =
+        _controller.cartesianController().localToCartesian(e.localPosition);
+    switch (_controller.toolType()) {
+      case ToolType.fixedBar:
+        // TODO: Handle this case.
+        break;
+      case ToolType.fixedDot:
+        _addChargeAt(pos);
+        break;
+      case ToolType.object:
+        // TODO: Handle this case.
+        break;
+      case ToolType.none:
+        // TODO: Handle this case.
+        break;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    return WorldSimulator();
+    final staticCharges = _controller.staticCharges();
     final charges = _controller.charges();
     final type = _controller.type();
     final vectorPairs = _controller.vectorPairs();
@@ -201,7 +191,8 @@ class _ChargesContainerState extends State<ChargesContainer> {
     final quality = _controller.quality();
     final distance = _controller.distance();
     final scale = _controller.cartesianController().scale;
-    return Column(
+    final toolType = _controller.toolType();
+    /*return Column(
       children: [
         Expanded(
           child: Cartesian(
@@ -214,19 +205,19 @@ class _ChargesContainerState extends State<ChargesContainer> {
               ),
               Positioned.fill(
                 child: GestureDetector(
-                  onTapUp: _onAddCharge,
+                  onTapUp: _onToolUp,
                   onScaleStart: _scaleStart,
                   onScaleUpdate: _scaleUpdate,
                   onScaleEnd: _scaleEnd,
                   behavior: HitTestBehavior.translucent,
                 ),
               ),
-              for (var i = 0; i < charges.length; i++)
+              for (var i = 0; i < staticCharges.length; i++)
                 ModifiableCharge(
-                  charge: charges[i],
-                  onUpdate: (c) =>
-                      _controller.charges.update((charges) => charges[i] = c),
-                  onRemove: () => _controller.charges.update(
+                  charge: staticCharges[i],
+                  onUpdate: (c) => _controller.staticCharges
+                      .update((charges) => charges[i] = c),
+                  onRemove: () => _controller.staticCharges.update(
                     (charges) => charges.removeAt(i),
                   ),
                 ),
@@ -285,59 +276,16 @@ class _ChargesContainerState extends State<ChargesContainer> {
           ),
           onSelected: (d) => _controller.distance.set(d),
         ),
+        EnumPopupButton<ToolType>(
+          values: ToolType.values,
+          buildItem: (_, e) => Text(e.toString()),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text('Distancia da simulação: ${toolType.toString()}'),
+          ),
+          onSelected: (t) => _controller.toolType.set(t),
+        ),
       ],
-    );
-  }
-}
-
-class _TranslationDragManager extends PointerDragManager {
-  final CartesianViewplaneController controller;
-
-  _TranslationDragManager(this.controller);
-
-  Offset? _initialTranslation;
-
-  @override
-  void pointerCancel(PointerCancelEvent event) {
-    if (_initialTranslation == null) {
-      return;
-    }
-    controller.setTranslation(_initialTranslation!);
-    _initialTranslation = null;
-  }
-
-  @override
-  void pointerDown(PointerDownEvent event) {
-    _initialTranslation = controller.translation;
-  }
-
-  @override
-  void pointerMove(PointerMoveEvent event) {
-    controller.addTranslation(event.delta.scale(1, -1));
-  }
-
-  @override
-  void pointerUp(PointerUpEvent event) {
-    _initialTranslation = null;
-  }
-}
-
-class _VectorHoverManager extends PointerHoverManager {
-  final void Function() removePointer;
-  final void Function(Offset) update;
-
-  _VectorHoverManager(
-    this.removePointer,
-    this.update,
-  );
-
-  @override
-  void pointerCancel(PointerCancelEvent event) {
-    removePointer();
-  }
-
-  @override
-  void pointerHover(PointerHoverEvent event) {
-    update(event.localPosition);
+    );*/
   }
 }

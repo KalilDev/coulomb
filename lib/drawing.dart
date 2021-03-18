@@ -117,8 +117,6 @@ void paintVector(
     ..transform((m..invert()).storage);
 }
 
-double log10(double num) => log(num) * log10e;
-
 class VectorFieldPainter extends CartesianPainter {
   final List<Charge> charges;
 

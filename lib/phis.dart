@@ -1,12 +1,74 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart';
 
-class Charge {
-  final Vector2 position;
-  final double mod;
+abstract class PhysicalObject {}
 
-  Charge(this.position, this.mod);
+abstract class ChargedObject implements PhysicalObject {
+  List<Charge> get charges;
 }
+
+abstract class MovingObject implements PhysicalObject {
+  Vector2 get position;
+  Vector2 get velocity;
+}
+
+abstract class MassfulObject implements PhysicalObject {
+  double get mass;
+}
+
+abstract class CollidableObject implements PhysicalObject {
+  Rect get collisionRect;
+  Vector2 get center;
+}
+
+abstract class CollidableSurface implements PhysicalObject {
+  Vector2 surfaceFor(CollidableObject collidingObject);
+  bool isColliding(CollidableObject collidable);
+  double factorForVelocity(Vector2 velocity);
+}
+
+abstract class ISimulatedWorld {
+  Vector2 gravitationalFieldAt(Vector2 v);
+  Vector2 electricFieldAtPoint(Vector2 v);
+  Vector2 electricFieldAtCharge(Charge c);
+  void update(Duration dt);
+}
+
+extension MonadIterable<T> on Iterable<T> {
+  Iterable<T1> bind<T1>(Iterable<T1> Function(T) fn) sync* {
+    for (final v in this) {
+      yield* fn(v);
+    }
+  }
+}
+
+class Charge {
+  final Vector2 position = Vector2.zero();
+  double mod;
+
+  Charge(Vector2 initialPosition, this.mod) {
+    position.setFrom(initialPosition);
+  }
+
+  int get hashCode {
+    var result = 7;
+    result = result * 31 + position.hashCode;
+    result = result * 31 + mod.hashCode;
+    return result;
+  }
+
+  bool operator ==(Object other) =>
+      other is Charge && (position == other.position && mod == other.mod);
+
+  Charge copy() => Charge(position, mod);
+
+  @override
+  String toString() =>
+      'Charge#${hashCode.toRadixString(16)}(mod: $mod, pos: $position)';
+}
+
+double log10(double num) => log(num) * log10e;
 
 /// Calc the magnitude of an electric field originating from a single [source]
 /// at an [target] point.

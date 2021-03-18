@@ -73,7 +73,7 @@ class ManagedListener extends StatefulWidget {
     Key? key,
     required this.createManager,
     this.child,
-    this.behavior = HitTestBehavior.opaque,
+    this.behavior = HitTestBehavior.translucent,
   }) : super(key: key);
   @override
   _ManagedListenerState createState() => _ManagedListenerState();

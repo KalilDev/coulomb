@@ -6,6 +6,12 @@ import 'cartesian.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:coulomb/vec_conversion.dart';
 
+Color chargeColor(double charge) => charge > 0
+    ? Colors.blue
+    : charge == 0
+        ? Colors.grey
+        : Colors.red;
+
 class ModifiableCharge extends StatefulWidget {
   final Charge charge;
   final ValueChanged<Charge>? onUpdate;
@@ -126,7 +132,7 @@ class _ChargeDragManager extends PointerDragManager {
 
   @override
   void pointerUp(PointerUpEvent event) {
-    onChanged!(Charge(_position, initialCharge.mod));
+    onChanged?.call(Charge(_position, initialCharge.mod));
     onInternalUpdate(null);
   }
 }

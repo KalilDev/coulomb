@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../phis.dart';
 
 class PropController extends ChangeNotifier with PropScope {
   @override
@@ -154,14 +155,6 @@ mixin PropScope {
         .forEach(buff.write);
     buff..write(' ]\n}');
     return buff.toString();
-  }
-}
-
-extension MonadIterable<T> on Iterable<T> {
-  Iterable<T1> bind<T1>(Iterable<T1> Function(T) fn) sync* {
-    for (final v in this) {
-      yield* fn(v);
-    }
   }
 }
 
