@@ -243,13 +243,7 @@ class SimulatedWorld implements ISimulatedWorld {
   ];
   List<ChargedBar> get bars => UnmodifiableListView(_bars);
 
-  final List<Charge> _fixedCharges = [
-    Charge(
-      Vector2(-50, 0),
-      10,
-    ),
-    //Charge(Vector2(10, 0), 10),
-  ];
+  final List<Charge> _fixedCharges = [];
   List<Charge> get fixedCharges => UnmodifiableListView(_fixedCharges);
   final List<SimulatedObject> _objects = [
     SimulatedObject(position: Vector2(0, 20))
@@ -261,9 +255,7 @@ class SimulatedWorld implements ISimulatedWorld {
   void reset() {
     _fixedCharges
       ..clear()
-      ..addAll([
-        Charge(Vector2(-50, 0), 10),
-      ]);
+      ..addAll([]);
     _bars
       ..clear()
       ..addAll([
@@ -782,7 +774,7 @@ class _WorldSimulatorState extends State<WorldSimulator>
           (o) => ModifiableObject(
               object: o,
               onRemove: () => setState(
-                    () => world.updateObjects((objs) => objs.remove(e)),
+                    () => world.updateObjects((objs) => objs.remove(o)),
                   )),
         ),
         _toolbar(context),
