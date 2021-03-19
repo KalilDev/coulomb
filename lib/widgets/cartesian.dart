@@ -222,7 +222,7 @@ class _CartesianState extends State<Cartesian> {
   void _scaleUpdate(ScaleUpdateDetails details) {
     final focusDelta = details.localFocalPoint - _initialFocalPoint!;
     final translation = _initialTranslation! + focusDelta.scale(1, -1);
-    final scale = (_baseScale! * details.scale).clamp(0.4, 15.0);
+    final scale = (_baseScale! * details.scale);
     _controller.setScaleAndTranslation(
       scale,
       translation,

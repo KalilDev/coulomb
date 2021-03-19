@@ -37,7 +37,7 @@ class _PointerHoverVectorViewerState extends State<PointerHoverVectorViewer> {
           .toList();
 
   PointerManager? _createGestureManager(PointerEvent e) {
-    if (e is PointerHoverEvent) {
+    if (e is PointerHoverEvent && e.kind != PointerDeviceKind.touch) {
       final pointer = e.pointer;
       return _VectorHoverManager(
         () => setState(() {

@@ -6,6 +6,7 @@ import 'package:coulomb/widgets/cartesian.dart';
 import 'package:coulomb/widgets/charge.dart';
 import 'package:coulomb/widgets/vector_field.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../vec_conversion.dart';
 import 'package:coulomb/vec_conversion.dart';
@@ -188,6 +189,18 @@ class SimulatedObject
   Vector2 get center => position;
 }
 
+double lerp3(
+  double minusOne,
+  double zero,
+  double one,
+  double t,
+) {
+  if (t >= 0) {
+    return lerpDouble(zero, one, t)!;
+  }
+  return lerpDouble(zero, minusOne, -t)!;
+}
+
 class GroundSurface extends CollidableSurface {
   final double height;
 
@@ -208,17 +221,17 @@ class GroundSurface extends CollidableSurface {
   }
 
   @override
-  double factorForVelocity(Vector2 velocity) {
+  Vector2 factorForVelocity(Vector2 velocity) {
     // Get the direction
     final normal = velocity.normalized();
-    // Get the angle from normal to a [0,-1] vector
-    final angle = atan2(normal.y, normal.x) + (pi / 2);
-    final frac = (angle / pi).abs();
-
-    const direct = 0.4;
-    final result = direct + lerpDouble(0.0, 0.4, frac / 2)!;
-    //print('result: $result, frac: $frac');
-    return result;
+    // 99% of horizontal velocity will be preserved if the vector is pointing in
+    // the horizontal, and 40% will be preserved if it is pointing down
+    final horizontal = lerp3(0.90, 1.0, 0.90, normal.x);
+    // When the velocity is pointing downward, the dissipation will be
+    // proportional to how much it is pointed down.
+    // 60% will be the maximum dissipation
+    final vertical = lerp3(0.4, 1, 1, normal.y);
+    return Vector2(horizontal, vertical);
   }
 }
 
@@ -318,49 +331,48 @@ class SimulatedWorld implements ISimulatedWorld {
   var simulationStep = Duration(milliseconds: 1);
 
   @override
-  void update(Duration dt) {
+  bool update(Duration dt) {
+    bool didCollide = false;
     final dtInSecs = dt.inMicroseconds / 1000000;
     //print('step $dtInSecs');
     for (final o in objects) {
       if (!o.simulating) {
         continue;
       }
-      final forces = [
-        electricFieldAtCharge(o.charges.single) * o.charge,
-        gravitationalFieldAt(o.position) * o.mass,
-      ];
-      final resultingForce = forces.fold<Vector2>(
-        Vector2.zero(),
-        (resulting, force) => resulting..add(force),
-      );
-      final acceleration = resultingForce.scaled(o.mass);
-      final dv = acceleration.scaled(dtInSecs);
-
       final oldVelocity = o.velocity.clone();
-      // Update velocity
-      o.velocity.add(dv);
       // Update distance
       o.position.add(oldVelocity * dtInSecs);
-      if (o.velocity.length >= 10) {
-        //debugger();
-      }
-      //print(o.position);
-      // Check collision with ground
       if (!ground.isColliding(o)) {
+        final forces = [
+          electricFieldAtCharge(o.charges.single) * o.charge,
+          gravitationalFieldAt(o.position) * o.mass,
+        ];
+        final resultingForce = forces.fold<Vector2>(
+          Vector2.zero(),
+          (resulting, force) => resulting..add(force),
+        );
+        final acceleration = resultingForce.scaled(o.mass);
+        final dv = acceleration.scaled(dtInSecs);
+
+        // Update velocity
+        o.velocity.add(dv);
         continue;
       }
+      // In case we are colliding, the normal force is equal and opposite to the
+      // resulting force, so we can avoid calculating it alltogether.
+      didCollide = true;
+      // Set position to an non-collliding surface
       final surface = ground.surfaceFor(o);
-      //print(surface);
-      //final surfaceDirection = (surface.clone() - o.position)..normalize();
-
       o.position.setFrom(surface);
-      final dampening =
-          ground.factorForVelocity(o.velocity.clone()).clamp(0.0, 1.0);
-      o.velocity..scale(dampening);
+
+      // Simulate an rebound energy loss
+      final dampening = ground.factorForVelocity(o.velocity.clone());
+
+      o.velocity..multiply(dampening);
+      // Rebound the velocity
       o.velocity..multiply(Vector2(1, -1));
-      final v = () {}();
-      v.toString();
     }
+    return didCollide;
   }
 }
 
@@ -375,6 +387,8 @@ class _WorldSimulatorState extends State<WorldSimulator>
   final cartesianController = CartesianViewplaneController();
   final visualizationController = VectorFieldController();
   var tool = ToolType.none;
+  var collisionSound = false;
+
   @override
   void initState() {
     super.initState();
@@ -531,8 +545,16 @@ class _WorldSimulatorState extends State<WorldSimulator>
                 ),
               ],
             ),
+            SizedBox(height: 8.0),
             Text('ΔT da simulação (µs)',
                 style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 8.0),
+            Text('Click em colisões',
+                style: Theme.of(context).textTheme.subtitle1),
+            SizedBox(height: 4.0),
+            Switch(
+                value: collisionSound,
+                onChanged: (s) => setState(() => collisionSound = s)),
             SizedBox(height: 4.0),
             Row(
               children: [
@@ -612,12 +634,16 @@ class _WorldSimulatorState extends State<WorldSimulator>
 
   Duration? _previousFrameEpoch;
 
+  List<bool> _lastFramesCollided = List.filled(10, false);
+  int _frameIndex = 0;
+
   void _onFrame(Duration epoch) {
     if (_previousFrameEpoch == null) {
       _previousFrameEpoch = epoch;
       setState(() {});
       return;
     }
+    var colliding = false;
     final dt = (epoch - _previousFrameEpoch!) * world.simulationSpeed;
     _previousFrameEpoch = epoch;
 
@@ -627,10 +653,21 @@ class _WorldSimulatorState extends State<WorldSimulator>
     final truncatedCount = howManySteps.toInt();
     final lastStep = howManySteps - truncatedCount;
     for (var i = 0; i < truncatedCount; i++) {
-      world.update(dt * (1 / truncatedCount));
+      colliding |= world.update(dt * (1 / truncatedCount));
     }
-    world.update(dt * lastStep);
+    colliding |= world.update(dt * lastStep);
+    _lastFramesCollided[_frameIndex % 10] = colliding;
     setState(() {});
+    if (!colliding) {
+      return;
+    }
+    // Play a sound if one was not played in the last 10 frames
+    if (_lastFramesCollided.every((e) => e)) {
+      return;
+    }
+    if (collisionSound) {
+      SystemSound.play(SystemSoundType.click);
+    }
   }
 
   void _addChargeAt(Offset pos) async {

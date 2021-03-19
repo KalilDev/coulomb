@@ -25,14 +25,14 @@ abstract class CollidableObject implements PhysicalObject {
 abstract class CollidableSurface implements PhysicalObject {
   Vector2 surfaceFor(CollidableObject collidingObject);
   bool isColliding(CollidableObject collidable);
-  double factorForVelocity(Vector2 velocity);
+  Vector2 factorForVelocity(Vector2 velocity);
 }
 
 abstract class ISimulatedWorld {
   Vector2 gravitationalFieldAt(Vector2 v);
   Vector2 electricFieldAtPoint(Vector2 v);
   Vector2 electricFieldAtCharge(Charge c);
-  void update(Duration dt);
+  bool update(Duration dt);
 }
 
 extension MonadIterable<T> on Iterable<T> {

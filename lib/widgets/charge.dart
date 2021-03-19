@@ -150,6 +150,7 @@ class ChargeWidget extends StatelessWidget with PreferredSizeWidget {
       shape: CircleBorder(),
       child: InkWell(
         onTap: onTap,
+        customBorder: CircleBorder(),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(

@@ -58,7 +58,7 @@ class ChargeFieldPainter extends CartesianPainter {
         }
         path.lineTo(p.x, p.y);
       }
-
+/*
       var middlePoint = pathPoints[pathPoints.length ~/ 2];
       const arrowSize = 3.0;
       final fieldAtMiddle = electricFieldAt(charges, middlePoint);
@@ -69,7 +69,7 @@ class ChargeFieldPainter extends CartesianPainter {
         middlePoint.toOffset(),
         (middlePoint - fieldDirection * arrowSize + perpendicular).toOffset(),
         (middlePoint - fieldDirection * arrowSize - perpendicular).toOffset(),
-      ]);
+      ]);*/
     }
     canvas.drawPath(path, paint);
     canvas.drawVertices(
