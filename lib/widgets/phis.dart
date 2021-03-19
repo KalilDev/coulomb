@@ -373,23 +373,12 @@ class WorldSimulator extends StatefulWidget {
   _WorldSimulatorState createState() => _WorldSimulatorState();
 }
 
-class _WorldSimulatorState extends State<WorldSimulator>
-    with WidgetsBindingObserver {
+class _WorldSimulatorState extends State<WorldSimulator> {
   final world = SimulatedWorld();
   final cartesianController = CartesianViewplaneController();
   final visualizationController = VectorFieldController();
   var tool = ToolType.none;
   var collisionSound = false;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   Widget _labeledIcon(
     BuildContext context, {
@@ -648,7 +637,7 @@ class _WorldSimulatorState extends State<WorldSimulator>
       colliding |= world.update(dt * (1 / truncatedCount));
     }
     colliding |= world.update(dt * lastStep);
-    _lastFramesCollided[_frameIndex % 10] = colliding;
+    _lastFramesCollided[_frameIndex++ % 10] = colliding;
     setState(() {});
     if (!colliding) {
       return;
